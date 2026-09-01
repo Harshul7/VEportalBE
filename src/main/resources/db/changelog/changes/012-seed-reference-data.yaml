@@ -1,0 +1,91 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-seed-reference-data
+      author: veportal
+      comment: Seed course and portal users. Password for both seeded accounts is 'Passw0rd!' (bcrypt hashed).
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  valueNumeric: 1
+              - column:
+                  name: email
+                  value: harshul.dondeti@iiit.ac.in
+              - column:
+                  name: password_hash
+                  value: '$2a$10$Y0eGQ3rF9jVz1vBmSxOQ9uK7cT4nL5wA2dH8jR6pUyZsN3qXcE1fW'
+              - column:
+                  name: full_name
+                  value: Harshul Dondeti
+              - column:
+                  name: role
+                  value: FACULTY
+              - column:
+                  name: staff_code
+                  value: FAC-VE-2041
+              - column:
+                  name: department
+                  value: Virtual Enterprise Programme
+              - column:
+                  name: status
+                  value: ACTIVE
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  valueNumeric: 2
+              - column:
+                  name: email
+                  value: admin@iiit.ac.in
+              - column:
+                  name: password_hash
+                  value: '$2a$10$Y0eGQ3rF9jVz1vBmSxOQ9uK7cT4nL5wA2dH8jR6pUyZsN3qXcE1fW'
+              - column:
+                  name: full_name
+                  value: VE Programme Administrator
+              - column:
+                  name: role
+                  value: ADMIN
+              - column:
+                  name: staff_code
+                  value: ADM-VE-0001
+              - column:
+                  name: department
+                  value: Academic Office
+              - column:
+                  name: status
+                  value: ACTIVE
+        - insert:
+            tableName: courses
+            columns:
+              - column:
+                  name: id
+                  valueNumeric: 1
+              - column:
+                  name: code
+                  value: VE-SPR-2026
+              - column:
+                  name: name
+                  value: VE Course
+              - column:
+                  name: term
+                  value: Spring 2026
+              - column:
+                  name: status
+                  value: In progress
+              - column:
+                  name: summary
+                  value: 'The VE Course is a faculty-led academic programme at IIIT Hyderabad. Faculty document class sessions, record attendance, optionally note participation, upload course materials, and keep a teaching log of what was covered after each class.'
+              - column:
+                  name: faculty_id
+                  valueNumeric: 1
+      rollback:
+        - delete:
+            tableName: courses
+            where: id = 1
+        - delete:
+            tableName: users
+            where: id in (1, 2)

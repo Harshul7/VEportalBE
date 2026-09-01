@@ -1,0 +1,309 @@
+databaseChangeLog:
+  - changeSet:
+      id: 013-create-test-data-students
+      author: veportal
+      comment: Table backing the DataFlowTestStudent CRUD feature. Seeded with 20 reference rows.
+      changes:
+        - createTable:
+            tableName: test_data_students
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: student_code
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_test_data_students_code
+              - column:
+                  name: full_name
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: varchar(190)
+              - column:
+                  name: programme
+                  type: varchar(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: batch
+                  type: varchar(20)
+              - column:
+                  name: gender
+                  type: varchar(20)
+              - column:
+                  name: date_of_birth
+                  type: date
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - createIndex:
+            tableName: test_data_students
+            indexName: idx_test_data_students_programme
+            columns:
+              - column:
+                  name: programme
+        - createIndex:
+            tableName: test_data_students
+            indexName: idx_test_data_students_batch
+            columns:
+              - column:
+                  name: batch
+        - createIndex:
+            tableName: test_data_students
+            indexName: idx_test_data_students_status
+            columns:
+              - column:
+                  name: status
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS001' }
+              - column: { name: full_name, value: 'Aarav Mehta' }
+              - column: { name: email, value: 'aarav.mehta@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2004-03-15' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS002' }
+              - column: { name: full_name, value: 'Ananya Rao' }
+              - column: { name: email, value: 'ananya.rao@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech ECE' }
+              - column: { name: batch, value: '2024' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2005-07-22' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS003' }
+              - column: { name: full_name, value: 'Vihaan Iyer' }
+              - column: { name: email, value: 'vihaan.iyer@students.iiit.ac.in' }
+              - column: { name: programme, value: 'Dual Degree CSE' }
+              - column: { name: batch, value: '2025' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2006-01-09' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS004' }
+              - column: { name: full_name, value: 'Ishita Reddy' }
+              - column: { name: email, value: 'ishita.reddy@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2004-11-30' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS005' }
+              - column: { name: full_name, value: 'Arjun Nair' }
+              - column: { name: email, value: 'arjun.nair@students.iiit.ac.in' }
+              - column: { name: programme, value: 'M.Tech CSE' }
+              - column: { name: batch, value: '2022' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2001-04-18' }
+              - column: { name: status, value: 'INACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS006' }
+              - column: { name: full_name, value: 'Meera Patel' }
+              - column: { name: email, value: 'meera.patel@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech ECE' }
+              - column: { name: batch, value: '2024' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2005-09-14' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS007' }
+              - column: { name: full_name, value: 'Kabir Gupta' }
+              - column: { name: email, value: 'kabir.gupta@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2025' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2006-06-01' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS008' }
+              - column: { name: full_name, value: 'Sana Mehta' }
+              - column: { name: email, value: 'sana.mehta@students.iiit.ac.in' }
+              - column: { name: programme, value: 'MS by Research' }
+              - column: { name: batch, value: '2022' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2002-12-05' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS009' }
+              - column: { name: full_name, value: 'Aditya Kulkarni' }
+              - column: { name: email, value: 'aditya.kulkarni@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2004-08-19' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS010' }
+              - column: { name: full_name, value: 'Diya Joshi' }
+              - column: { name: email, value: 'diya.joshi@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech ECE' }
+              - column: { name: batch, value: '2024' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2005-03-27' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS011' }
+              - column: { name: full_name, value: 'Rohan Singh' }
+              - column: { name: email, value: 'rohan.singh@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2025' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2006-10-11' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS012' }
+              - column: { name: full_name, value: 'Nisha Das' }
+              - column: { name: email, value: 'nisha.das@students.iiit.ac.in' }
+              - column: { name: programme, value: 'M.Tech CSE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2003-02-02' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS013' }
+              - column: { name: full_name, value: 'Aarav Menon' }
+              - column: { name: email, value: 'aarav.menon@students.iiit.ac.in' }
+              - column: { name: programme, value: 'Dual Degree CSE' }
+              - column: { name: batch, value: '2024' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2005-05-08' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS014' }
+              - column: { name: full_name, value: 'Pooja Khan' }
+              - column: { name: email, value: 'pooja.khan@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech ECE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2004-01-17' }
+              - column: { name: status, value: 'INACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS015' }
+              - column: { name: full_name, value: 'Dev Pillai' }
+              - column: { name: email, value: 'dev.pillai@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2025' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2006-12-25' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS016' }
+              - column: { name: full_name, value: 'Tanvi Deshmukh' }
+              - column: { name: email, value: 'tanvi.deshmukh@students.iiit.ac.in' }
+              - column: { name: programme, value: 'MS by Research' }
+              - column: { name: batch, value: '2022' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2002-06-30' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS017' }
+              - column: { name: full_name, value: 'Karthik Sharma' }
+              - column: { name: email, value: 'karthik.sharma@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2024' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2005-07-04' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS018' }
+              - column: { name: full_name, value: 'Aisha Rao' }
+              - column: { name: email, value: 'aisha.rao@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech ECE' }
+              - column: { name: batch, value: '2023' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2004-09-21' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS019' }
+              - column: { name: full_name, value: 'Nikhil Patel' }
+              - column: { name: email, value: 'nikhil.patel@students.iiit.ac.in' }
+              - column: { name: programme, value: 'M.Tech CSE' }
+              - column: { name: batch, value: '2022' }
+              - column: { name: gender, value: 'Male' }
+              - column: { name: date_of_birth, value: '2001-11-12' }
+              - column: { name: status, value: 'ACTIVE' }
+        - insert:
+            tableName: test_data_students
+            columns:
+              - column: { name: student_code, value: 'TESTS020' }
+              - column: { name: full_name, value: 'Shreya Iyengar' }
+              - column: { name: email, value: 'shreya.iyengar@students.iiit.ac.in' }
+              - column: { name: programme, value: 'B.Tech CSE' }
+              - column: { name: batch, value: '2025' }
+              - column: { name: gender, value: 'Female' }
+              - column: { name: date_of_birth, value: '2006-08-27' }
+              - column: { name: status, value: 'ACTIVE' }
+      rollback:
+        - dropTable:
+            tableName: test_data_students

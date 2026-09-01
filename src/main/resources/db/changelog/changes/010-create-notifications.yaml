@@ -1,0 +1,72 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-create-notifications
+      author: veportal
+      changes:
+        - createTable:
+            tableName: notifications
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body
+                  type: varchar(500)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: link_url
+                  type: varchar(255)
+              - column:
+                  name: read_at
+                  type: datetime(6)
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addForeignKeyConstraint:
+            baseTableName: notifications
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_notifications_user
+            onDelete: CASCADE
+        - createIndex:
+            tableName: notifications
+            indexName: idx_notifications_user_read
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: read_at
+      rollback:
+        - dropTable:
+            tableName: notifications

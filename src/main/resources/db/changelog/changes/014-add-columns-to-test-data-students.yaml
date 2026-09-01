@@ -1,0 +1,449 @@
+  databaseChangeLog:
+    - changeSet:
+        id: 014-add-columns-to-test-data-students
+        author: veportal
+        validCheckSum: 9:a1b2c3d4e5f6
+        comment: Add 12 new columns to test_data_students for full 20-field CRUD demo.
+        changes:
+          - addColumn:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    type: varchar(20)
+                - column:
+                    name: address
+                    type: varchar(255)
+                - column:
+                    name: city
+                    type: varchar(80)
+                - column:
+                    name: state
+                    type: varchar(80)
+                - column:
+                    name: pincode
+                    type: varchar(10)
+                - column:
+                    name: father_name
+                    type: varchar(150)
+                - column:
+                    name: mother_name
+                    type: varchar(150)
+                - column:
+                    name: admission_date
+                    type: date
+                - column:
+                    name: scholarship
+                    type: boolean
+                    defaultValueBoolean: false
+                    constraints:
+                      nullable: false
+                - column:
+                    name: notes
+                    type: varchar(500)
+                - column:
+                    name: emergency_contact
+                    type: varchar(20)
+                - column:
+                    name: blood_group
+                    type: varchar(10)
+          - createIndex:
+              tableName: test_data_students
+              indexName: idx_test_data_students_city
+              columns:
+                - column:
+                    name: city
+          - createIndex:
+              tableName: test_data_students
+              indexName: idx_test_data_students_blood_group
+              columns:
+                - column:
+                    name: blood_group
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43210'
+              where: student_code = 'TESTS001'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: address
+                    value: '123 Knowledge Park'
+                - column:
+                    name: city
+                    value: 'Hyderabad'
+                - column:
+                    name: state
+                    value: 'Telangana'
+                - column:
+                    name: pincode
+                    value: '500032'
+                - column:
+                    name: father_name
+                    value: 'Rakesh Mehta'
+                - column:
+                    name: mother_name
+                    value: 'Sunita Mehta'
+                - column:
+                    name: admission_date
+                    value: '2023-07-15'
+                - column:
+                    name: scholarship
+                    value: 'true'
+                - column:
+                    name: notes
+                    value: 'Merit-based scholarship recipient'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 11111'
+                - column:
+                    name: blood_group
+                    value: 'A+'
+              where: student_code = 'TESTS001'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43211'
+                - column:
+                    name: city
+                    value: 'Bangalore'
+                - column:
+                    name: state
+                    value: 'Karnataka'
+                - column:
+                    name: pincode
+                    value: '560001'
+                - column:
+                    name: father_name
+                    value: 'Venkat Rao'
+                - column:
+                    name: mother_name
+                    value: 'Lakshmi Rao'
+                - column:
+                    name: admission_date
+                    value: '2024-07-20'
+                - column:
+                    name: scholarship
+                    value: 'false'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 22222'
+                - column:
+                    name: blood_group
+                    value: 'B+'
+              where: student_code = 'TESTS002'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43212'
+                - column:
+                    name: city
+                    value: 'Chennai'
+                - column:
+                    name: state
+                    value: 'Tamil Nadu'
+                - column:
+                    name: pincode
+                    value: '600001'
+                - column:
+                    name: father_name
+                    value: 'Suresh Iyer'
+                - column:
+                    name: mother_name
+                    value: 'Priya Iyer'
+                - column:
+                    name: admission_date
+                    value: '2025-07-10'
+                - column:
+                    name: scholarship
+                    value: 'true'
+                - column:
+                    name: notes
+                    value: 'Top scorer in entrance exam'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 33333'
+                - column:
+                    name: blood_group
+                    value: 'O+'
+              where: student_code = 'TESTS003'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43213'
+                - column:
+                    name: city
+                    value: 'Hyderabad'
+                - column:
+                    name: state
+                    value: 'Telangana'
+                - column:
+                    name: pincode
+                    value: '500034'
+                - column:
+                    name: father_name
+                    value: 'Krishna Reddy'
+                - column:
+                    name: mother_name
+                    value: 'Padma Reddy'
+                - column:
+                    name: admission_date
+                    value: '2023-07-15'
+                - column:
+                    name: scholarship
+                    value: 'false'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 44444'
+                - column:
+                    name: blood_group
+                    value: 'AB+'
+              where: student_code = 'TESTS004'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43214'
+                - column:
+                    name: city
+                    value: 'Pune'
+                - column:
+                    name: state
+                    value: 'Maharashtra'
+                - column:
+                    name: pincode
+                    value: '411001'
+                - column:
+                    name: father_name
+                    value: 'Anil Nair'
+                - column:
+                    name: mother_name
+                    value: 'Geeta Nair'
+                - column:
+                    name: admission_date
+                    value: '2022-07-18'
+                - column:
+                    name: scholarship
+                    value: 'true'
+                - column:
+                    name: notes
+                    value: 'Alumni referral admission'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 55555'
+                - column:
+                    name: blood_group
+                    value: 'A-'
+              where: student_code = 'TESTS005'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43215'
+                - column:
+                    name: city
+                    value: 'Ahmedabad'
+                - column:
+                    name: state
+                    value: 'Gujarat'
+                - column:
+                    name: pincode
+                    value: '380001'
+                - column:
+                    name: father_name
+                    value: 'Mahesh Patel'
+                - column:
+                    name: mother_name
+                    value: 'Kavita Patel'
+                - column:
+                    name: admission_date
+                    value: '2024-07-20'
+                - column:
+                    name: scholarship
+                    value: 'false'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 66666'
+                - column:
+                    name: blood_group
+                    value: 'B-'
+              where: student_code = 'TESTS006'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43216'
+                - column:
+                    name: city
+                    value: 'Delhi'
+                - column:
+                    name: state
+                    value: 'Delhi'
+                - column:
+                    name: pincode
+                    value: '110001'
+                - column:
+                    name: father_name
+                    value: 'Vikram Gupta'
+                - column:
+                    name: mother_name
+                    value: 'Ritu Gupta'
+                - column:
+                    name: admission_date
+                    value: '2025-07-10'
+                - column:
+                    name: scholarship
+                    value: 'true'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 77777'
+                - column:
+                    name: blood_group
+                    value: 'O-'
+              where: student_code = 'TESTS007'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43217'
+                - column:
+                    name: city
+                    value: 'Hyderabad'
+                - column:
+                    name: state
+                    value: 'Telangana'
+                - column:
+                    name: pincode
+                    value: '500032'
+                - column:
+                    name: father_name
+                    value: 'Arun Mehta'
+                - column:
+                    name: mother_name
+                    value: 'Neelam Mehta'
+                - column:
+                    name: admission_date
+                    value: '2022-07-18'
+                - column:
+                    name: scholarship
+                    value: 'false'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 88888'
+                - column:
+                    name: blood_group
+                    value: 'A+'
+              where: student_code = 'TESTS008'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43218'
+                - column:
+                    name: city
+                    value: 'Mumbai'
+                - column:
+                    name: state
+                    value: 'Maharashtra'
+                - column:
+                    name: pincode
+                    value: '400001'
+                - column:
+                    name: father_name
+                    value: 'Prakash Kulkarni'
+                - column:
+                    name: mother_name
+                    value: 'Sushma Kulkarni'
+                - column:
+                    name: admission_date
+                    value: '2023-07-15'
+                - column:
+                    name: scholarship
+                    value: 'true'
+                - column:
+                    name: notes
+                    value: 'Sports quota admission'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 99999'
+                - column:
+                    name: blood_group
+                    value: 'B+'
+              where: student_code = 'TESTS009'
+          - update:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                    value: '+91 98765 43219'
+                - column:
+                    name: city
+                    value: 'Jaipur'
+                - column:
+                    name: state
+                    value: 'Rajasthan'
+                - column:
+                    name: pincode
+                    value: '302001'
+                - column:
+                    name: father_name
+                    value: 'Dinesh Joshi'
+                - column:
+                    name: mother_name
+                    value: 'Usha Joshi'
+                - column:
+                    name: admission_date
+                    value: '2024-07-20'
+                - column:
+                    name: scholarship
+                    value: 'false'
+                - column:
+                    name: emergency_contact
+                    value: '+91 98765 10101'
+                - column:
+                    name: blood_group
+                    value: 'AB-'
+              where: student_code = 'TESTS010'
+        rollback:
+          - dropColumn:
+              tableName: test_data_students
+              columns:
+                - column:
+                    name: mobile
+                - column:
+                    name: address
+                - column:
+                    name: city
+                - column:
+                    name: state
+                - column:
+                    name: pincode
+                - column:
+                    name: father_name
+                - column:
+                    name: mother_name
+                - column:
+                    name: admission_date
+                - column:
+                    name: scholarship
+                - column:
+                    name: notes
+                - column:
+                    name: emergency_contact
+                - column:
+                    name: blood_group
+

@@ -1,0 +1,104 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-class-sessions
+      author: veportal
+      changes:
+        - createTable:
+            tableName: class_sessions
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: session_number
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: topic
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: session_date
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: start_time
+                  type: char(5)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: end_time
+                  type: char(5)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: room
+                  type: varchar(60)
+              - column:
+                  name: faculty_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addUniqueConstraint:
+            tableName: class_sessions
+            columnNames: course_id, session_number
+            constraintName: uq_class_sessions_course_number
+        - addForeignKeyConstraint:
+            baseTableName: class_sessions
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_sessions_course
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: class_sessions
+            baseColumnNames: faculty_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_sessions_faculty
+        - createIndex:
+            tableName: class_sessions
+            indexName: idx_class_sessions_course_date
+            columns:
+              - column:
+                  name: course_id
+              - column:
+                  name: session_date
+      rollback:
+        - dropTable:
+            tableName: class_sessions

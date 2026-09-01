@@ -1,0 +1,105 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-create-course-materials
+      author: veportal
+      changes:
+        - createTable:
+            tableName: course_materials
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: session_id
+                  type: bigint
+              - column:
+                  name: title
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: type
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: varchar(1000)
+              - column:
+                  name: file_name
+                  type: varchar(255)
+              - column:
+                  name: size_bytes
+                  type: bigint
+              - column:
+                  name: uploaded_by_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: uploaded_at
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addForeignKeyConstraint:
+            baseTableName: course_materials
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_materials_course
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: course_materials
+            baseColumnNames: session_id
+            referencedTableName: class_sessions
+            referencedColumnNames: id
+            constraintName: fk_materials_session
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: course_materials
+            baseColumnNames: uploaded_by_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_materials_uploaded_by
+        - createIndex:
+            tableName: course_materials
+            indexName: idx_materials_session
+            columns:
+              - column:
+                  name: session_id
+        - createIndex:
+            tableName: course_materials
+            indexName: idx_materials_type
+            columns:
+              - column:
+                  name: type
+      rollback:
+        - dropTable:
+            tableName: course_materials

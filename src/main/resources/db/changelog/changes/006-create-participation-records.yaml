@@ -1,0 +1,72 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-create-participation-records
+      author: veportal
+      changes:
+        - createTable:
+            tableName: participation_records
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: session_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: student_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: level
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notes
+                  type: varchar(500)
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addUniqueConstraint:
+            tableName: participation_records
+            columnNames: session_id, student_id
+            constraintName: uq_participation_session_student
+        - addForeignKeyConstraint:
+            baseTableName: participation_records
+            baseColumnNames: session_id
+            referencedTableName: class_sessions
+            referencedColumnNames: id
+            constraintName: fk_participation_session
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: participation_records
+            baseColumnNames: student_id
+            referencedTableName: students
+            referencedColumnNames: id
+            constraintName: fk_participation_student
+            onDelete: CASCADE
+      rollback:
+        - dropTable:
+            tableName: participation_records

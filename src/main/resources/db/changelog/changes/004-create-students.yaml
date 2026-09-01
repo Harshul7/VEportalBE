@@ -1,0 +1,86 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-students
+      author: veportal
+      changes:
+        - createTable:
+            tableName: students
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: student_code
+                  type: varchar(30)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_students_code
+              - column:
+                  name: full_name
+                  type: varchar(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: programme
+                  type: varchar(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: batch
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: varchar(190)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - createIndex:
+            tableName: students
+            indexName: idx_students_programme
+            columns:
+              - column:
+                  name: programme
+        - createIndex:
+            tableName: students
+            indexName: idx_students_batch
+            columns:
+              - column:
+                  name: batch
+        - createIndex:
+            tableName: students
+            indexName: idx_students_status
+            columns:
+              - column:
+                  name: status
+      rollback:
+        - dropTable:
+            tableName: students

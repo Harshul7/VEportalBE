@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: VEPortalBE
+
+  datasource:
+    url: ${VEPORTAL_DB_URL:jdbc:mysql://localhost:3306/veportal?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${VEPORTAL_DB_USERNAME:root}
+    password: ${VEPORTAL_DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: ${VEPORTAL_PORT:8080}
+  error:
+    include-stacktrace: never
+
+app:
+  cors:
+    allowed-origins: ${VEPORTAL_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  jwt:
+    secret: ${VEPORTAL_JWT_SECRET:veportal-local-development-secret-key-change-me-0123456789abcdef}
+    expiration-minutes: ${VEPORTAL_JWT_EXPIRATION_MINUTES:720}
+  seed-demo-data: ${VEPORTAL_SEED_DEMO:true}
+
+logging:
+  level:
+    org.example.veportal: INFO
+    org.hibernate.SQL: WARN
+    liquibase: INFO

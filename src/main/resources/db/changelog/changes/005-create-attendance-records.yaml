@@ -1,0 +1,85 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-attendance-records
+      author: veportal
+      changes:
+        - createTable:
+            tableName: attendance_records
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: session_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: student_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: marked_by_id
+                  type: bigint
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addUniqueConstraint:
+            tableName: attendance_records
+            columnNames: session_id, student_id
+            constraintName: uq_attendance_session_student
+        - addForeignKeyConstraint:
+            baseTableName: attendance_records
+            baseColumnNames: session_id
+            referencedTableName: class_sessions
+            referencedColumnNames: id
+            constraintName: fk_attendance_session
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: attendance_records
+            baseColumnNames: student_id
+            referencedTableName: students
+            referencedColumnNames: id
+            constraintName: fk_attendance_student
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: attendance_records
+            baseColumnNames: marked_by_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_attendance_marked_by
+            onDelete: SET NULL
+        - createIndex:
+            tableName: attendance_records
+            indexName: idx_attendance_student
+            columns:
+              - column:
+                  name: student_id
+      rollback:
+        - dropTable:
+            tableName: attendance_records

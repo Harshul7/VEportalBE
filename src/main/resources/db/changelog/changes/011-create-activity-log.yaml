@@ -1,0 +1,69 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-create-activity-log
+      author: veportal
+      changes:
+        - createTable:
+            tableName: activity_log
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: bigint
+              - column:
+                  name: kind
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: context_text
+                  type: varchar(255)
+              - column:
+                  name: href
+                  type: varchar(255)
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addForeignKeyConstraint:
+            baseTableName: activity_log
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_activity_user
+            onDelete: SET NULL
+        - createIndex:
+            tableName: activity_log
+            indexName: idx_activity_created
+            columns:
+              - column:
+                  name: created_at
+                  descending: true
+      rollback:
+        - dropTable:
+            tableName: activity_log

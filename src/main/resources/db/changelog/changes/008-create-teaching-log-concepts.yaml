@@ -1,0 +1,65 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-teaching-log-concepts
+      author: veportal
+      changes:
+        - createTable:
+            tableName: teaching_log_concepts
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: log_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: label
+                  type: varchar(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: position
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addForeignKeyConstraint:
+            baseTableName: teaching_log_concepts
+            baseColumnNames: log_id
+            referencedTableName: teaching_logs
+            referencedColumnNames: id
+            constraintName: fk_concepts_log
+            onDelete: CASCADE
+        - createIndex:
+            tableName: teaching_log_concepts
+            indexName: idx_concepts_log
+            columns:
+              - column:
+                  name: log_id
+      rollback:
+        - dropTable:
+            tableName: teaching_log_concepts
