@@ -15,7 +15,8 @@ public class UserMapper {
                 Labels.of(user.getRole()),
                 user.getStaffCode(),
                 user.getDepartment(),
-                Labels.of(user.getStatus())
+                Labels.of(user.getStatus()),
+                user.isMustChangePassword()
         );
     }
 }

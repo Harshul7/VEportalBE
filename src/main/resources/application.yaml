@@ -38,6 +38,13 @@ app:
   jwt:
     secret: ${VEPORTAL_JWT_SECRET:veportal-local-development-secret-key-change-me-0123456789abcdef}
     expiration-minutes: ${VEPORTAL_JWT_EXPIRATION_MINUTES:720}
+  mail:
+    host: ${VEPORTAL_MAIL_HOST:smtp.gmail.com}
+    port: ${VEPORTAL_MAIL_PORT:587}
+    username: ${VEPORTAL_MAIL_USERNAME:}
+    password: ${VEPORTAL_MAIL_PASSWORD:}
+    from: ${VEPORTAL_MAIL_FROM:admin@iiit.ac.in}
+    portal-url: ${VEPORTAL_PORTAL_URL:http://localhost:5173}
   seed-demo-data: ${VEPORTAL_SEED_DEMO:true}
 
 logging:

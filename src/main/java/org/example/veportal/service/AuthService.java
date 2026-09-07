@@ -69,6 +69,7 @@ public class AuthService {
             throw new BadCredentialsException("Current password is incorrect");
         }
         account.setPasswordHash(passwordEncoder.encode(newPassword));
+        account.setMustChangePassword(false);
         userAccountRepository.save(account);
         log.info("Password changed for account: {}", email);
     }
@@ -79,6 +80,7 @@ public class AuthService {
         UserAccount account = userAccountRepository.findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new BadCredentialsException("Invalid reset token"));
         account.setPasswordHash(passwordEncoder.encode(newPassword));
+        account.setMustChangePassword(false);
         userAccountRepository.save(account);
         log.info("Password reset for account: {}", email);
     }

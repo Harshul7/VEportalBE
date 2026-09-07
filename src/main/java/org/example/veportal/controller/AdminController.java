@@ -1,5 +1,6 @@
 package org.example.veportal.controller;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.TestDataStudentRepository;
 import org.example.veportal.repository.UserAccountRepository;
+import org.example.veportal.service.MailService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -42,19 +44,22 @@ public class AdminController {
     private final ClassSessionRepository sessionRepository;
     private final AttendanceRecordRepository attendanceRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MailService mailService;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            TestDataStudentRepository testDataStudentRepository,
                            CourseRepository courseRepository,
                            ClassSessionRepository sessionRepository,
                            AttendanceRecordRepository attendanceRepository,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           MailService mailService) {
         this.userAccountRepository = userAccountRepository;
         this.testDataStudentRepository = testDataStudentRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
         this.attendanceRepository = attendanceRepository;
         this.passwordEncoder = passwordEncoder;
+        this.mailService = mailService;
     }
 
     @GetMapping("/dashboard")
@@ -188,9 +193,13 @@ public class AdminController {
         user.setDepartment(request.department() == null ? "" : request.department().trim());
         user.setRole(Role.FACULTY);
         user.setStatus(AccountStatus.ACTIVE);
-        user.setPasswordHash(passwordEncoder.encode("Passw0rd!"));
+        String temporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setMustChangePassword(true);
         UserAccount saved = userAccountRepository.save(user);
-        return ResponseEntity.ok(ApiResponse.success(toFacultyItem(saved), "Faculty created"));
+        mailService.sendCredentials(saved.getEmail(), saved.getFullName(), saved.getEmail(), temporaryPassword);
+        return ResponseEntity.ok(ApiResponse.success(
+                toFacultyItem(saved, temporaryPassword), "Faculty created; use the temporary password to sign in"));
     }
 
     @PostMapping("/faculty/{id}/account")
@@ -206,9 +215,15 @@ public class AdminController {
             user.setRole(Role.FACULTY);
         }
         user.setStatus(AccountStatus.ACTIVE);
-        user.setPasswordHash(passwordEncoder.encode("Passw0rd!"));
+        String temporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setMustChangePassword(true);
         UserAccount saved = userAccountRepository.save(user);
-        return ResponseEntity.ok(ApiResponse.success(toFacultyItem(saved), "Account activated"));
+        if (request.sendEmail() == null || request.sendEmail()) {
+            mailService.sendCredentials(saved.getEmail(), saved.getFullName(), saved.getEmail(), temporaryPassword);
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                toFacultyItem(saved, temporaryPassword), "Account activated; use the temporary password to sign in"));
     }
 
     @PatchMapping("/faculty/{id}/status")
@@ -229,9 +244,14 @@ public class AdminController {
         if (user == null) {
             return ResponseEntity.ok(ApiResponse.error("Faculty not found"));
         }
-        user.setPasswordHash(passwordEncoder.encode("Passw0rd!"));
+        String temporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setMustChangePassword(true);
         userAccountRepository.save(user);
-        return ResponseEntity.ok(ApiResponse.success(null, "Password reset to default"));
+        mailService.sendCredentials(user.getEmail(), user.getFullName(), user.getEmail(), temporaryPassword);
+        return ResponseEntity.ok(ApiResponse.success(
+                java.util.Map.of("temporaryPassword", temporaryPassword),
+                "Password reset; new temporary password generated"));
     }
 
     @GetMapping("/branches")
@@ -327,6 +347,10 @@ public class AdminController {
     }
 
     private FacultyListItem toFacultyItem(UserAccount u) {
+        return toFacultyItem(u, null);
+    }
+
+    private FacultyListItem toFacultyItem(UserAccount u, String temporaryPassword) {
         return new FacultyListItem(
                 u.getId(),
                 u.getStaffCode(),
@@ -337,7 +361,8 @@ public class AdminController {
                 u.getRole().name(),
                 u.getStatus() == AccountStatus.ACTIVE,
                 true,
-                u.getCreatedAt().toString()
+                u.getCreatedAt().toString(),
+                temporaryPassword
         );
     }
 
@@ -376,6 +401,31 @@ public class AdminController {
         return "STF-" + (System.currentTimeMillis() % 100000);
     }
 
+    private String generateTemporaryPassword() {
+        String upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        String lower = "abcdefghjkmnpqrstuvwxyz";
+        String digits = "23456789";
+        String symbols = "!@#$%";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder();
+        sb.append(upper.charAt(random.nextInt(upper.length())));
+        sb.append(lower.charAt(random.nextInt(lower.length())));
+        sb.append(digits.charAt(random.nextInt(digits.length())));
+        sb.append(symbols.charAt(random.nextInt(symbols.length())));
+        String pool = upper + lower + digits + symbols;
+        for (int i = 0; i < 6; i++) {
+            sb.append(pool.charAt(random.nextInt(pool.length())));
+        }
+        char[] chars = sb.toString().toCharArray();
+        for (int i = chars.length - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            char t = chars[i];
+            chars[i] = chars[j];
+            chars[j] = t;
+        }
+        return new String(chars);
+    }
+
     public record DashboardStats(
             long totalStudents, long totalFaculty, long totalChapters, long classesConducted,
             double overallAttendancePercentage, String currentAcademicYear,
@@ -391,7 +441,8 @@ public class AdminController {
     public record FacultyListItem(
             long id, String facultyId, String name, String email,
             String employeeId, String department, String role,
-            boolean active, boolean hasAccount, String createdAt
+            boolean active, boolean hasAccount, String createdAt,
+            String temporaryPassword
     ) {}
 
     public record CourseListItem(

@@ -6,6 +6,7 @@ public record UserResponse(
         String role,
         String facultyId,
         String department,
-        String status
+        String status,
+        boolean mustChangePassword
 ) {
 }

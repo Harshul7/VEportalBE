@@ -27,3 +27,5 @@ databaseChangeLog:
       file: db/changelog/changes/013-create-test-data-students.yaml
   - include:
       file: db/changelog/changes/014-add-columns-to-test-data-students.yaml
+  - include:
+      file: db/changelog/changes/015-add-must-change-password-to-users.yaml
