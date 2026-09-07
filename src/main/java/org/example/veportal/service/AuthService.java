@@ -60,4 +60,26 @@ public class AuthService {
                 .orElseThrow(() -> NotFoundException.resource("User", email));
         return userMapper.toResponse(account);
     }
+
+    @Transactional
+    public void changePassword(String email, String currentPassword, String newPassword) {
+        UserAccount account = userAccountRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
+            throw new BadCredentialsException("Current password is incorrect");
+        }
+        account.setPasswordHash(passwordEncoder.encode(newPassword));
+        userAccountRepository.save(account);
+        log.info("Password changed for account: {}", email);
+    }
+
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        String email = jwtService.extractSubject(token);
+        UserAccount account = userAccountRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new BadCredentialsException("Invalid reset token"));
+        account.setPasswordHash(passwordEncoder.encode(newPassword));
+        userAccountRepository.save(account);
+        log.info("Password reset for account: {}", email);
+    }
 }
