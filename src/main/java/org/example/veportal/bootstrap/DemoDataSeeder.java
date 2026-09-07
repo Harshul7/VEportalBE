@@ -8,12 +8,16 @@ import java.util.Map;
 import java.util.function.DoubleSupplier;
 import org.example.veportal.config.AppProperties;
 import org.example.veportal.entity.AccountStatus;
+import org.example.veportal.entity.AcademicYear;
 import org.example.veportal.entity.ActivityKind;
 import org.example.veportal.entity.AttendanceRecord;
 import org.example.veportal.entity.AttendanceStatus;
+import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
+import org.example.veportal.entity.CourseFaculty;
 import org.example.veportal.entity.CourseMaterial;
+import org.example.veportal.entity.CourseStudent;
 import org.example.veportal.entity.MaterialType;
 import org.example.veportal.entity.Notification;
 import org.example.veportal.entity.ParticipationLevel;
@@ -24,11 +28,15 @@ import org.example.veportal.entity.Student;
 import org.example.veportal.entity.TeachingLog;
 import org.example.veportal.entity.TeachingLogConcept;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.ActivityLogRepository;
 import org.example.veportal.repository.AttendanceRecordRepository;
+import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.repository.ClassSessionRepository;
+import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseRepository;
+import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.NotificationRepository;
 import org.example.veportal.repository.ParticipationRecordRepository;
 import org.example.veportal.repository.StudentRepository;
@@ -157,6 +165,10 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final UserAccountRepository userRepository;
     private final NotificationRepository notificationRepository;
     private final ActivityLogRepository activityLogRepository;
+    private final AcademicYearRepository academicYearRepository;
+    private final ChapterRepository chapterRepository;
+    private final CourseFacultyRepository courseFacultyRepository;
+    private final CourseStudentRepository courseStudentRepository;
     private final PasswordEncoder passwordEncoder;
     private final jakarta.persistence.EntityManager entityManager;
 
@@ -171,6 +183,10 @@ public class DemoDataSeeder implements ApplicationRunner {
                           UserAccountRepository userRepository,
                           NotificationRepository notificationRepository,
                           ActivityLogRepository activityLogRepository,
+                          AcademicYearRepository academicYearRepository,
+                          ChapterRepository chapterRepository,
+                          CourseFacultyRepository courseFacultyRepository,
+                          CourseStudentRepository courseStudentRepository,
                           PasswordEncoder passwordEncoder,
                           jakarta.persistence.EntityManager entityManager) {
         this.appProperties = appProperties;
@@ -184,6 +200,10 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.userRepository = userRepository;
         this.notificationRepository = notificationRepository;
         this.activityLogRepository = activityLogRepository;
+        this.academicYearRepository = academicYearRepository;
+        this.chapterRepository = chapterRepository;
+        this.courseFacultyRepository = courseFacultyRepository;
+        this.courseStudentRepository = courseStudentRepository;
         this.passwordEncoder = passwordEncoder;
         this.entityManager = entityManager;
     }
@@ -194,11 +214,9 @@ public class DemoDataSeeder implements ApplicationRunner {
         if (!appProperties.seedDemoData()) {
             return;
         }
-        if (studentRepository.count() > 0 || sessionRepository.count() > 0) {
-            return;
-        }
         log.info("Seeding VE Portal demo data...");
         initialiseReferencePasswords();
+
         Course course = courseRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("Course reference data missing"));
         UserAccount faculty = userRepository.findByEmailIgnoreCase("harshul.dondeti@iiit.ac.in")
@@ -206,8 +224,16 @@ public class DemoDataSeeder implements ApplicationRunner {
         UserAccount office = userRepository.findByEmailIgnoreCase("admin@iiit.ac.in")
                 .orElseThrow(() -> new IllegalStateException("Admin reference data missing"));
 
+        seedAcademicStructure(course, faculty);
+
+        if (studentRepository.count() > 0 || sessionRepository.count() > 0) {
+            log.info("Existing data found; skipping demo data population.");
+            return;
+        }
+
         Lcg studentsRandom = new Lcg(42);
         List<Student> students = seedStudents(studentsRandom);
+        seedStudentEnrollments(course, students);
         List<ClassSession> sessions = seedSessions(course, faculty);
         seedAttendance(sessions, students);
         seedParticipation(sessions, students);
@@ -289,6 +315,81 @@ public class DemoDataSeeder implements ApplicationRunner {
             students.add(studentRepository.save(student));
         }
         return students;
+    }
+
+    private void seedAcademicStructure(Course course, UserAccount faculty) {
+        AcademicYear year = seedAcademicYear();
+        if (course.getAcademicYear() == null) {
+            course.setAcademicYear(year);
+            course = courseRepository.save(course);
+        }
+        seedChapters(course);
+        seedFacultyMapping(course, faculty);
+    }
+
+    private AcademicYear seedAcademicYear() {
+        if (academicYearRepository.count() > 0) {
+            return academicYearRepository.findByCurrentTrue().orElseGet(
+                    () -> academicYearRepository.findAll().stream().findFirst().orElseThrow());
+        }
+        AcademicYear year = new AcademicYear();
+        year.setName("2025-2026");
+        year.setStartYear(2025);
+        year.setEndYear(2026);
+        year.setCurrent(true);
+        year.setStatus(AccountStatus.ACTIVE);
+        return academicYearRepository.save(year);
+    }
+
+    private void seedChapters(Course course) {
+        if (chapterRepository.countByCourseId(course.getId()) > 0) {
+            return;
+        }
+        String[][] chapterData = {
+                {"Course Orientation and VE Operating Model", "Overview of the VE course, its operating model, and documentation workflows."},
+                {"Problem Framing for Virtual Enterprises", "How to frame problems, map stakeholders, and capture requirements."},
+                {"Data Structures — Foundations", "Abstract data types, arrays, and lists in enterprise-style problems."},
+                {"Complexity and Algorithmic Thinking", "Time and space complexity with algorithm design trade-offs."},
+                {"Linear Structures in Practice", "Stacks, queues, and linked structures in applied settings."},
+                {"Trees and Hierarchical Data", "Tree structures for organisational and hierarchical data."},
+                {"Hashing and Lookup Design", "Hash tables, collision handling, and lookup optimisation."},
+                {"Sorting Strategies and Trade-offs", "Comparison of common sorting strategies and their costs."},
+                {"Graph Representations", "Adjacency lists and matrices for modelling networks."},
+                {"BFS, DFS and Traversal Patterns", "Breadth-first and depth-first graph traversal."},
+                {"Shortest Paths in Networks", "Dijkstra and related path-finding algorithms."},
+                {"Spanning Trees and Connectivity", "Minimum spanning trees and connectivity analysis."},
+                {"Greedy Design Patterns", "When greedy approaches are appropriate and their limitations."},
+                {"Dynamic Programming — Foundations", "Introductory dynamic programming patterns and examples."},
+                {"Recursion and Backtracking", "Recursive problem solving and backtracking techniques."},
+                {"Advanced Graph Algorithms", "SCC, topological order and advanced traversal ideas."}
+        };
+        for (int i = 0; i < chapterData.length; i++) {
+            Chapter chapter = new Chapter();
+            chapter.setCourse(course);
+            chapter.setChapterNumber(i + 1);
+            chapter.setTitle(chapterData[i][0]);
+            chapter.setDescription(chapterData[i][1]);
+            chapter.setDisplayOrder(i + 1);
+            chapter.setStatus("ACTIVE");
+            chapterRepository.save(chapter);
+        }
+    }
+
+    private void seedFacultyMapping(Course course, UserAccount faculty) {
+        if (courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), faculty.getId())) {
+            return;
+        }
+        courseFacultyRepository.save(new CourseFaculty(course.getId(), faculty.getId()));
+    }
+
+    private void seedStudentEnrollments(Course course, List<Student> students) {
+        if (courseStudentRepository.findByCourseId(course.getId()).isEmpty()) {
+            for (Student student : students) {
+                if (student.getStatus() == AccountStatus.ACTIVE) {
+                    courseStudentRepository.save(new CourseStudent(course.getId(), student.getId()));
+                }
+            }
+        }
     }
 
     private List<ClassSession> seedSessions(Course course, UserAccount faculty) {

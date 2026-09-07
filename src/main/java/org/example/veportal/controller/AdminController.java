@@ -4,24 +4,37 @@ import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.example.veportal.dto.ApiResponse;
 import org.example.veportal.dto.PagedResult;
 import org.example.veportal.entity.AccountStatus;
+import org.example.veportal.entity.AcademicYear;
+import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.Course;
+import org.example.veportal.entity.CourseFaculty;
+import org.example.veportal.entity.CourseStudent;
 import org.example.veportal.entity.Role;
-import org.example.veportal.entity.TestDataStudent;
+import org.example.veportal.entity.Student;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.exception.NotFoundException;
+import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.AttendanceRecordRepository;
+import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.repository.ClassSessionRepository;
+import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
-import org.example.veportal.repository.TestDataStudentRepository;
+import org.example.veportal.repository.CourseStudentRepository;
+import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.service.MailService;
+import org.example.veportal.util.Percent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +42,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,41 +53,56 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final UserAccountRepository userAccountRepository;
-    private final TestDataStudentRepository testDataStudentRepository;
     private final CourseRepository courseRepository;
     private final ClassSessionRepository sessionRepository;
     private final AttendanceRecordRepository attendanceRepository;
+    private final AcademicYearRepository academicYearRepository;
+    private final ChapterRepository chapterRepository;
+    private final CourseFacultyRepository courseFacultyRepository;
+    private final CourseStudentRepository courseStudentRepository;
+    private final StudentRepository studentRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
 
     public AdminController(UserAccountRepository userAccountRepository,
-                           TestDataStudentRepository testDataStudentRepository,
                            CourseRepository courseRepository,
                            ClassSessionRepository sessionRepository,
                            AttendanceRecordRepository attendanceRepository,
+                           AcademicYearRepository academicYearRepository,
+                           ChapterRepository chapterRepository,
+                           CourseFacultyRepository courseFacultyRepository,
+                           CourseStudentRepository courseStudentRepository,
+                           StudentRepository studentRepository,
                            PasswordEncoder passwordEncoder,
                            MailService mailService) {
         this.userAccountRepository = userAccountRepository;
-        this.testDataStudentRepository = testDataStudentRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
         this.attendanceRepository = attendanceRepository;
+        this.academicYearRepository = academicYearRepository;
+        this.chapterRepository = chapterRepository;
+        this.courseFacultyRepository = courseFacultyRepository;
+        this.courseStudentRepository = courseStudentRepository;
+        this.studentRepository = studentRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
     }
 
     @GetMapping("/dashboard")
     public ResponseEntity<ApiResponse<DashboardStats>> dashboard() {
-        long totalStudents = testDataStudentRepository.count();
+        long totalStudents = studentRepository.count();
         long totalFaculty = userAccountRepository.findAll().stream()
                 .filter(u -> u.getRole() == Role.FACULTY)
                 .count();
         long activeCourses = courseRepository.count();
         long classesConducted = sessionRepository.count();
+        AcademicYear current = academicYearRepository.findByCurrentTrue().orElse(null);
+        long totalChapters = chapterRepository.count();
+        String currentYear = current != null ? current.getName() : "2025-2026";
 
         DashboardStats stats = new DashboardStats(
-                totalStudents, totalFaculty, 0, classesConducted,
-                0.0, "2025-2026", activeCourses, 0
+                totalStudents, totalFaculty, totalChapters, classesConducted,
+                0.0, currentYear, activeCourses, totalChapters
         );
         return ResponseEntity.ok(ApiResponse.success(stats, "Dashboard stats retrieved"));
     }
@@ -81,14 +110,30 @@ public class AdminController {
     @GetMapping("/students")
     public ResponseEntity<ApiResponse<List<StudentListItem>>> listStudents(
             @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "branchId", required = false) Long branchId,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
-        Page<TestDataStudent> result = testDataStudentRepository.findAll(
+        Specification<Student> spec = (root, query, cb) -> cb.conjunction();
+        if (search != null && !search.isBlank()) {
+            String pattern = "%" + search.trim().toLowerCase() + "%";
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.like(cb.lower(root.get("fullName")), pattern),
+                    cb.like(cb.lower(root.get("studentCode")), pattern),
+                    cb.like(cb.lower(root.get("email")), pattern)));
+        }
+        if (branchId != null && branchId > 0) {
+            String programme = branchNameForId(branchId);
+            if (!"General".equals(programme)) {
+                spec = spec.and((root, query, cb) -> cb.equal(root.get("programme"), programme));
+            }
+        }
+        Page<Student> result = studentRepository.findAll(spec,
                 PageRequest.of(Math.max(page, 0), Math.min(size, 100),
                         Sort.by(Sort.Direction.ASC, "id")));
 
+        Map<Long, Double> percents = attendancePercentages(result.getContent());
         List<StudentListItem> items = result.getContent().stream()
-                .map(s -> toStudentItem(s))
+                .map(s -> toStudentItem(s, percents.get(s.getId())))
                 .toList();
 
         org.example.veportal.dto.PageMeta meta =
@@ -102,24 +147,25 @@ public class AdminController {
     public ResponseEntity<ApiResponse<StudentListItem>> createStudent(@RequestBody CreateStudentRequest request) {
         String code = request.rollNumber() == null || request.rollNumber().isBlank()
                 ? generatedStudentCode() : request.rollNumber().trim();
-        if (testDataStudentRepository.existsByStudentCodeIgnoreCase(code)) {
+        if (studentRepository.existsByStudentCodeIgnoreCase(code)) {
             return ResponseEntity.ok(ApiResponse.error("A student with roll number " + code + " already exists"));
         }
-        TestDataStudent s = new TestDataStudent();
+        Student s = new Student();
         s.setStudentCode(code);
         s.setFullName(request.name() == null ? "" : request.name().trim());
-        s.setEmail(request.email() == null ? null : request.email().trim());
+        s.setEmail(request.email() == null || request.email().isBlank()
+                ? deriveEmail(request.name()) : request.email().trim());
         s.setProgramme(branchNameForId(request.branchId()));
         s.setStatus(AccountStatus.ACTIVE);
-        s.setBatch("2025");
-        TestDataStudent saved = testDataStudentRepository.save(s);
-        return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved), "Student created"));
+        s.setBatch(academicYearBatchName(request.academicYearId()));
+        Student saved = studentRepository.save(s);
+        return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, null), "Student created"));
     }
 
     @PutMapping("/students/{id}")
     public ResponseEntity<ApiResponse<StudentListItem>> updateStudent(@PathVariable Long id,
                                                                       @RequestBody CreateStudentRequest request) {
-        TestDataStudent s = testDataStudentRepository.findById(id).orElse(null);
+        Student s = studentRepository.findById(id).orElse(null);
         if (s == null) {
             return ResponseEntity.ok(ApiResponse.error("Student not found"));
         }
@@ -129,34 +175,45 @@ public class AdminController {
         if (request.name() != null && !request.name().isBlank()) {
             s.setFullName(request.name().trim());
         }
-        if (request.email() != null) {
+        if (request.email() != null && !request.email().isBlank()) {
             s.setEmail(request.email().trim());
         }
         if (request.branchId() != null) {
             s.setProgramme(branchNameForId(request.branchId()));
         }
-        TestDataStudent saved = testDataStudentRepository.save(s);
-        return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved), "Student updated"));
+        if (request.academicYearId() != null) {
+            s.setBatch(academicYearBatchName(request.academicYearId()));
+        }
+        Student saved = studentRepository.save(s);
+        Double percent = attendancePercentages(List.of(saved)).get(saved.getId());
+        return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, percent), "Student updated"));
     }
 
     @GetMapping("/students/{id}")
     public ResponseEntity<ApiResponse<StudentListItem>> getStudent(@PathVariable Long id) {
-        TestDataStudent s = testDataStudentRepository.findById(id).orElse(null);
+        Student s = studentRepository.findById(id).orElse(null);
         if (s == null) {
             return ResponseEntity.ok(ApiResponse.error("Student not found"));
         }
-        return ResponseEntity.ok(ApiResponse.success(toStudentItem(s), "Student retrieved"));
+        Double percent = attendancePercentages(List.of(s)).get(s.getId());
+        return ResponseEntity.ok(ApiResponse.success(toStudentItem(s, percent), "Student retrieved"));
     }
 
     @GetMapping("/students/{id}/performance")
     public ResponseEntity<ApiResponse<StudentPerformance>> studentPerformance(@PathVariable Long id) {
-        TestDataStudent s = testDataStudentRepository.findById(id).orElse(null);
+        Student s = studentRepository.findById(id).orElse(null);
         if (s == null) {
             return ResponseEntity.ok(ApiResponse.error("Student not found"));
         }
+        AttendanceRecordRepository.StudentAttendanceAggregation agg =
+                attendanceRepository.aggregateByStudents(List.of(s.getId())).stream().findFirst().orElse(null);
+        int total = agg != null ? (int) agg.getTotal() : 0;
+        int present = agg != null ? (int) agg.getPresent() : 0;
+        Double percent = Percent.of(present, total);
         StudentPerformance p = new StudentPerformance(
                 s.getId(), s.getFullName(), s.getStudentCode(),
-                s.getProgramme(), 0, 0, 0, 0.0, List.of(), List.of()
+                s.getProgramme(), total, present, total - present,
+                percent == null ? 0.0 : percent, List.of(), List.of()
         );
         return ResponseEntity.ok(ApiResponse.success(p, "Performance retrieved"));
     }
@@ -258,7 +315,7 @@ public class AdminController {
     public ResponseEntity<ApiResponse<List<BranchItem>>> listBranches() {
         List<BranchItem> branches = new ArrayList<>();
         int id = 1;
-        for (String programme : testDataStudentRepository.findDistinctProgrammes()) {
+        for (String programme : studentRepository.findDistinctProgrammes()) {
             branches.add(new BranchItem(id++, programme, programme, true, LocalDateTime.now().toString()));
         }
         if (branches.isEmpty()) {
@@ -278,32 +335,53 @@ public class AdminController {
 
     @GetMapping("/academic-years")
     public ResponseEntity<ApiResponse<List<AcademicYearItem>>> listAcademicYears() {
-        return ResponseEntity.ok(ApiResponse.success(
-                List.of(new AcademicYearItem(1L, "2025-2026", 2025, 2026, true, true,
-                        LocalDateTime.now().toString())),
-                "Academic years retrieved"));
+        List<AcademicYearItem> items = academicYearRepository.findAll(Sort.by(Sort.Direction.DESC, "startYear"))
+                .stream()
+                .map(this::toAcademicYearItem)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(items, "Academic years retrieved"));
     }
 
     @PostMapping("/academic-years")
     public ResponseEntity<ApiResponse<AcademicYearItem>> createAcademicYear(@RequestBody CreateAcademicYearRequest request) {
-        AcademicYearItem created = new AcademicYearItem(2L,
-                request.name() == null || request.name().isBlank() ? "2026-2027" : request.name().trim(),
-                request.startYear() == null ? 2026 : request.startYear(),
-                request.endYear() == null ? 2027 : request.endYear(),
-                false, true, LocalDateTime.now().toString());
-        return ResponseEntity.ok(ApiResponse.success(created, "Academic year created"));
+        String name = request.name() == null || request.name().isBlank()
+                ? (request.startYear() + "-" + request.endYear()) : request.name().trim();
+        if (academicYearRepository.findByName(name).isPresent()) {
+            return ResponseEntity.ok(ApiResponse.error("An academic year named " + name + " already exists"));
+        }
+        AcademicYear year = new AcademicYear();
+        year.setName(name);
+        year.setStartYear(request.startYear() == null ? nameYearStart(name) : request.startYear());
+        year.setEndYear(request.endYear() == null ? year.getStartYear() + 1 : request.endYear());
+        boolean makeCurrent = !academicYearRepository.findByCurrentTrue().isPresent();
+        year.setCurrent(makeCurrent);
+        year.setStatus(AccountStatus.ACTIVE);
+        AcademicYear saved = academicYearRepository.save(year);
+        return ResponseEntity.ok(ApiResponse.success(toAcademicYearItem(saved),
+                makeCurrent ? "Academic year created and marked as current" : "Academic year created"));
     }
 
     @PutMapping("/academic-years/{yearId}/current")
     public ResponseEntity<ApiResponse<AcademicYearItem>> setCurrentYear(@PathVariable Long yearId) {
-        AcademicYearItem item = new AcademicYearItem(yearId, "2025-2026", 2025, 2026, true, true,
-                LocalDateTime.now().toString());
-        return ResponseEntity.ok(ApiResponse.success(item, "Academic year marked as current"));
+        AcademicYear year = academicYearRepository.findById(yearId).orElse(null);
+        if (year == null) {
+            return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
+        }
+        academicYearRepository.findAll().forEach(y -> {
+            if (y.isCurrent()) {
+                y.setCurrent(false);
+                academicYearRepository.save(y);
+            }
+        });
+        year.setCurrent(true);
+        AcademicYear saved = academicYearRepository.save(year);
+        return ResponseEntity.ok(ApiResponse.success(toAcademicYearItem(saved), "Academic year marked as current"));
     }
 
     @GetMapping("/academic-years/{yearId}/courses")
     public ResponseEntity<ApiResponse<List<CourseListItem>>> coursesByYear(@PathVariable Long yearId) {
-        List<CourseListItem> courses = courseRepository.findAll().stream()
+        List<CourseListItem> courses = courseRepository.findByAcademicYearIdOrderByCodeAsc(yearId)
+                .stream()
                 .map(this::toCourseItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(courses, "Courses retrieved"));
@@ -311,27 +389,142 @@ public class AdminController {
 
     @PostMapping("/courses")
     public ResponseEntity<ApiResponse<CourseListItem>> createCourse(@RequestBody CreateCourseRequest request) {
+        String code = request.code() == null || request.code().isBlank()
+                ? "VE-" + System.currentTimeMillis() : request.code().trim();
+        if (courseRepository.findByCode(code).isPresent()) {
+            return ResponseEntity.ok(ApiResponse.error("A course with code " + code + " already exists"));
+        }
         Course course = new Course();
-        course.setCode(request.code() == null ? "VE-" + System.currentTimeMillis() : request.code().trim());
+        course.setCode(code);
         course.setName(request.name() == null ? "Untitled Course" : request.name().trim());
         course.setTerm(request.courseType() == null ? "VE1" : request.courseType().trim());
         course.setStatus("ACTIVE");
+        if (request.academicYearId() != null) {
+            academicYearRepository.findById(request.academicYearId()).ifPresent(course::setAcademicYear);
+        }
         Course saved = courseRepository.save(course);
         return ResponseEntity.ok(ApiResponse.success(toCourseItem(saved), "Course created"));
     }
 
     @GetMapping("/courses/{courseId}/chapters")
-    public ResponseEntity<ApiResponse<List<Object>>> courseChapters(@PathVariable Long courseId) {
-        return ResponseEntity.ok(ApiResponse.success(List.of(), "Chapters retrieved"));
+    public ResponseEntity<ApiResponse<List<ChapterItem>>> courseChapters(@PathVariable Long courseId) {
+        if (!courseRepository.existsById(courseId)) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        List<ChapterItem> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAscChapterNumberAsc(courseId)
+                .stream()
+                .map(ch -> toChapterItem(ch, courseId))
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(chapters, "Chapters retrieved"));
     }
 
     @PostMapping("/courses/{courseId}/chapters")
-    public ResponseEntity<ApiResponse<Object>> createChapter(@PathVariable Long courseId,
-                                                             @RequestBody CreateChapterRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(null, "Chapter created"));
+    public ResponseEntity<ApiResponse<ChapterItem>> createChapter(@PathVariable Long courseId,
+                                                                  @RequestBody CreateChapterRequest request) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        int nextNumber = (int) (chapterRepository.countByCourseId(courseId) + 1);
+        Chapter chapter = new Chapter();
+        chapter.setCourse(course);
+        chapter.setChapterNumber(nextNumber);
+        chapter.setTitle(request.title() == null ? "Chapter " + nextNumber : request.title().trim());
+        chapter.setDescription(request.description());
+        chapter.setDisplayOrder(nextNumber);
+        chapter.setStatus("ACTIVE");
+        Chapter saved = chapterRepository.save(chapter);
+        return ResponseEntity.ok(ApiResponse.success(toChapterItem(saved, courseId), "Chapter created"));
     }
 
-    private StudentListItem toStudentItem(TestDataStudent s) {
+    @DeleteMapping("/courses/{courseId}/chapters/{chapterId}")
+    public ResponseEntity<ApiResponse<Object>> deleteChapter(@PathVariable Long courseId,
+                                                             @PathVariable Long chapterId) {
+        Chapter chapter = chapterRepository.findById(chapterId).orElse(null);
+        if (chapter == null || !chapter.getCourse().getId().equals(courseId)) {
+            return ResponseEntity.ok(ApiResponse.error("Chapter not found"));
+        }
+        chapterRepository.delete(chapter);
+        return ResponseEntity.ok(ApiResponse.success(null, "Chapter deleted"));
+    }
+
+    @GetMapping("/courses/{courseId}/faculties")
+    public ResponseEntity<ApiResponse<List<FacultyAssignmentItem>>> courseFaculties(@PathVariable Long courseId) {
+        if (!courseRepository.existsById(courseId)) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        List<Long> assignedIds = courseFacultyRepository.findByCourseId(courseId)
+                .stream().map(CourseFaculty::getFacultyId).toList();
+        List<FacultyAssignmentItem> items = userAccountRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.FACULTY)
+                .map(u -> new FacultyAssignmentItem(u.getId(), u.getFullName(), u.getEmail(),
+                        u.getStaffCode(), assignedIds.contains(u.getId())))
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(items, "Course faculty retrieved"));
+    }
+
+    @PostMapping("/courses/{courseId}/faculties")
+    public ResponseEntity<ApiResponse<Object>> assignFaculty(@PathVariable Long courseId,
+                                                             @RequestBody AssignFacultyRequest request) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        List<Long> facultyIds = request.facultyIds() == null ? List.of() : request.facultyIds();
+        List<CourseFaculty> current = courseFacultyRepository.findByCourseId(courseId);
+        List<Long> currentIds = current.stream().map(CourseFaculty::getFacultyId).toList();
+        for (CourseFaculty cf : current) {
+            if (!facultyIds.contains(cf.getFacultyId())) {
+                courseFacultyRepository.delete(cf);
+            }
+        }
+        for (Long facultyId : facultyIds) {
+            if (!currentIds.contains(facultyId) && userAccountRepository.existsById(facultyId)) {
+                courseFacultyRepository.save(new CourseFaculty(courseId, facultyId));
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(null, "Faculty assigned to course"));
+    }
+
+    @GetMapping("/courses/{courseId}/students")
+    public ResponseEntity<ApiResponse<List<StudentAssignmentItem>>> courseStudents(@PathVariable Long courseId) {
+        if (!courseRepository.existsById(courseId)) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        List<Long> assignedIds = courseStudentRepository.findByCourseId(courseId)
+                .stream().map(CourseStudent::getStudentId).toList();
+        List<StudentAssignmentItem> items = studentRepository.findAll(Sort.by(Sort.Direction.ASC, "fullName"))
+                .stream()
+                .map(s -> new StudentAssignmentItem(s.getId(), s.getFullName(), s.getStudentCode(),
+                        s.getProgramme(), assignedIds.contains(s.getId())))
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(items, "Course students retrieved"));
+    }
+
+    @PostMapping("/courses/{courseId}/students")
+    public ResponseEntity<ApiResponse<Object>> assignStudents(@PathVariable Long courseId,
+                                                              @RequestBody AssignStudentsRequest request) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) {
+            return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        }
+        List<Long> studentIds = request.studentIds() == null ? List.of() : request.studentIds();
+        List<CourseStudent> current = courseStudentRepository.findByCourseId(courseId);
+        List<Long> currentIds = current.stream().map(CourseStudent::getStudentId).toList();
+        for (CourseStudent cs : current) {
+            if (!studentIds.contains(cs.getStudentId())) {
+                courseStudentRepository.delete(cs);
+            }
+        }
+        for (Long studentId : studentIds) {
+            if (!currentIds.contains(studentId) && studentRepository.existsById(studentId)) {
+                courseStudentRepository.save(new CourseStudent(courseId, studentId));
+            }
+        }
+        return ResponseEntity.ok(ApiResponse.success(null, "Students assigned to course"));
+    }
+
+    private StudentListItem toStudentItem(Student s, Double attendancePercent) {
         return new StudentListItem(
                 s.getId(),
                 s.getStudentCode(),
@@ -340,9 +533,9 @@ public class AdminController {
                 null,
                 s.getProgramme(),
                 s.getProgramme(),
-                0,
+                1,
                 s.getStatus().name(),
-                0
+                attendancePercent == null ? 0.0 : attendancePercent
         );
     }
 
@@ -367,34 +560,104 @@ public class AdminController {
     }
 
     private CourseListItem toCourseItem(Course c) {
+        int chapterCount = (int) chapterRepository.countByCourseId(c.getId());
+        AcademicYear year = c.getAcademicYear();
         return new CourseListItem(
                 c.getId(),
                 c.getName(),
                 c.getCode(),
                 c.getTerm() != null ? c.getTerm() : "VE1",
                 1,
-                1L,
-                "2025-2026",
+                year != null ? year.getId() : 0,
+                year != null ? year.getName() : "",
                 c.getStatus() != null ? c.getStatus() : "ACTIVE",
-                0,
-                c.getCreatedAt().toString()
+                chapterCount,
+                c.getCreatedAt() == null ? "" : c.getCreatedAt().toString()
         );
+    }
+
+    private ChapterItem toChapterItem(Chapter ch, Long courseId) {
+        return new ChapterItem(
+                ch.getId(),
+                ch.getChapterNumber(),
+                ch.getTitle(),
+                ch.getDescription() == null ? "" : ch.getDescription(),
+                ch.getDisplayOrder() == null ? 0 : ch.getDisplayOrder(),
+                ch.getStatus() == null ? "ACTIVE" : ch.getStatus(),
+                courseId,
+                ch.getCourse().getName(),
+                ch.getCreatedAt() == null ? "" : ch.getCreatedAt().toString()
+        );
+    }
+
+    private AcademicYearItem toAcademicYearItem(AcademicYear y) {
+        return new AcademicYearItem(
+                y.getId(),
+                y.getName(),
+                y.getStartYear(),
+                y.getEndYear(),
+                y.isCurrent(),
+                y.getStatus() == AccountStatus.ACTIVE,
+                y.getCreatedAt() == null ? "" : y.getCreatedAt().toString()
+        );
+    }
+
+    private int nameYearStart(String name) {
+        try {
+            return Integer.parseInt(name.trim().substring(0, 4));
+        } catch (RuntimeException e) {
+            return LocalDate.now().getYear();
+        }
     }
 
     private String branchNameForId(Long branchId) {
         if (branchId == null || branchId <= 0) {
             return "General";
         }
-        List<String> programmes = testDataStudentRepository.findDistinctProgrammes();
+        List<String> programmes = studentRepository.findDistinctProgrammes();
         if (branchId - 1 < programmes.size()) {
             return programmes.get(branchId.intValue() - 1);
         }
         return "General";
     }
 
+    private String academicYearBatchName(Long academicYearId) {
+        if (academicYearId != null) {
+            Optional<AcademicYear> year = academicYearRepository.findById(academicYearId);
+            if (year.isPresent()) {
+                return year.get().getStartYear().toString();
+            }
+        }
+        return String.valueOf(LocalDate.now().getYear());
+    }
+
+    private String deriveEmail(String name) {
+        if (name == null || name.isBlank()) {
+            return "student@students.iiit.ac.in";
+        }
+        String base = name.trim().toLowerCase().replaceAll("\\s+", ".");
+        return base + "@students.iiit.ac.in";
+    }
+
+    private Map<Long, Double> attendancePercentages(List<Student> students) {
+        Map<Long, Double> result = new HashMap<>();
+        if (students.isEmpty()) {
+            return result;
+        }
+        List<Long> ids = students.stream().map(Student::getId).toList();
+        for (AttendanceRecordRepository.StudentAttendanceAggregation agg :
+                attendanceRepository.aggregateByStudents(ids)) {
+            Double percent = Percent.of(agg.getPresent(), agg.getTotal());
+            if (percent != null) {
+                result.put(agg.getStudentId(), percent);
+            }
+        }
+        return result;
+    }
+
     private String generatedStudentCode() {
-        long next = testDataStudentRepository.count() + 1001;
-        return "TES" + next;
+        long next = studentRepository.count() + 1001;
+        return "VE" + next;
     }
 
     private String generatedStaffCode() {
@@ -451,6 +714,20 @@ public class AdminController {
             String status, int chapterCount, String createdAt
     ) {}
 
+    public record ChapterItem(
+            long id, int chapterNumber, String title, String description,
+            int displayOrder, String status, long courseId, String courseName,
+            String createdAt
+    ) {}
+
+    public record FacultyAssignmentItem(
+            long id, String name, String email, String employeeId, boolean assigned
+    ) {}
+
+    public record StudentAssignmentItem(
+            long id, String name, String rollNumber, String programme, boolean assigned
+    ) {}
+
     public record BranchItem(long id, String code, String name, boolean active, String createdAt) {}
 
     public record AcademicYearItem(long id, String name, int startYear, int endYear,
@@ -479,4 +756,8 @@ public class AdminController {
                                       Long academicYearId) {}
 
     public record CreateChapterRequest(String title, String description) {}
+
+    public record AssignFacultyRequest(List<Long> facultyIds) {}
+
+    public record AssignStudentsRequest(List<Long> studentIds) {}
 }

@@ -33,6 +33,10 @@ public class Course extends BaseEntity {
     @JoinColumn(name = "faculty_id")
     private UserAccount faculty;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "academic_year_id")
+    private AcademicYear academicYear;
+
     public String getCode() {
         return code;
     }
@@ -79,5 +83,13 @@ public class Course extends BaseEntity {
 
     public void setFaculty(UserAccount faculty) {
         this.faculty = faculty;
+    }
+
+    public AcademicYear getAcademicYear() {
+        return academicYear;
+    }
+
+    public void setAcademicYear(AcademicYear academicYear) {
+        this.academicYear = academicYear;
     }
 }

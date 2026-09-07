@@ -11,6 +11,7 @@ import org.example.veportal.dto.response.StudentResponse;
 import org.example.veportal.service.StudentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,6 +51,11 @@ public class StudentsController {
         return ResponseEntity.ok(ApiResponse.success(response, "Student filters retrieved"));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<StudentResponse>> get(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(studentService.get(id), "Student retrieved"));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<StudentResponse>> create(
             @Valid @RequestBody StudentCreateRequest request) {
@@ -64,5 +70,11 @@ public class StudentsController {
             @Valid @RequestBody StudentUpdateRequest request) {
         StudentResponse response = studentService.update(id, request);
         return ResponseEntity.ok(ApiResponse.success(response, "Student record updated"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
+        studentService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null, "Student deleted"));
     }
 }

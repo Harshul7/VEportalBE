@@ -21,6 +21,10 @@ public class ClassSession extends BaseEntity {
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private Chapter chapter;
+
     @Column(name = "session_number", nullable = false)
     private Integer sessionNumber;
 
@@ -53,6 +57,14 @@ public class ClassSession extends BaseEntity {
 
     public void setCourse(Course course) {
         this.course = course;
+    }
+
+    public Chapter getChapter() {
+        return chapter;
+    }
+
+    public void setChapter(Chapter chapter) {
+        this.chapter = chapter;
     }
 
     public Integer getSessionNumber() {

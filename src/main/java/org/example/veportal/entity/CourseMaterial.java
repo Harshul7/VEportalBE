@@ -22,6 +22,10 @@ public class CourseMaterial extends BaseEntity {
     @JoinColumn(name = "session_id")
     private ClassSession session;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chapter_id")
+    private Chapter chapter;
+
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
@@ -59,6 +63,14 @@ public class CourseMaterial extends BaseEntity {
 
     public void setSession(ClassSession session) {
         this.session = session;
+    }
+
+    public Chapter getChapter() {
+        return chapter;
+    }
+
+    public void setChapter(Chapter chapter) {
+        this.chapter = chapter;
     }
 
     public String getTitle() {

@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/changelog/changes/014-add-columns-to-test-data-students.yaml
   - include:
       file: db/changelog/changes/015-add-must-change-password-to-users.yaml
+  - include:
+      file: db/changelog/changes/016-academic-years-chapters-mappings.yaml

@@ -121,6 +121,12 @@ public class StudentService {
         return studentMapper.toResponse(saved, percents.get(saved.getId()));
     }
 
+    @Transactional
+    public void delete(Long id) {
+        Student student = requireStudent(id);
+        studentRepository.delete(student);
+    }
+
     private void applyCommonFields(Student student, String name, String programme, String batch, String statusLabel) {
         student.setFullName(name.trim());
         student.setProgramme(programme.trim());

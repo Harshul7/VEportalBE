@@ -1,0 +1,290 @@
+databaseChangeLog:
+  # -----------------------------------------------------------------
+  # 016 - Academic years, chapters, and multi-faculty / student-course
+  #       mappings. All additions to existing tables are nullable so
+  #       existing seeded rows are unaffected.
+  # -----------------------------------------------------------------
+  - changeSet:
+      id: 016-create-academic-years
+      author: veportal
+      changes:
+        - createTable:
+            tableName: academic_years
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(40)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_academic_years_name
+              - column:
+                  name: start_year
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: end_year
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_current
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addColumn:
+            tableName: courses
+            columns:
+              - column:
+                  name: academic_year_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: courses
+            baseColumnNames: academic_year_id
+            referencedTableName: academic_years
+            referencedColumnNames: id
+            constraintName: fk_courses_academic_year
+            onDelete: SET NULL
+        - rollback:
+            - dropTable:
+                tableName: academic_years
+            - dropForeignKeyConstraint:
+                baseTableName: courses
+                constraintName: fk_courses_academic_year
+            - dropColumn:
+                tableName: courses
+                columnName: academic_year_id
+
+  - changeSet:
+      id: 016-create-chapters
+      author: veportal
+      changes:
+        - createTable:
+            tableName: chapters
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: chapter_number
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: varchar(2000)
+              - column:
+                  name: display_order
+                  type: int
+                  defaultValueNumeric: 0
+              - column:
+                  name: status
+                  type: varchar(20)
+                  defaultValue: ACTIVE
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addUniqueConstraint:
+            tableName: chapters
+            columnNames: course_id, chapter_number
+            constraintName: uq_chapters_course_number
+        - addForeignKeyConstraint:
+            baseTableName: chapters
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_chapters_course
+            onDelete: CASCADE
+        - addColumn:
+            tableName: class_sessions
+            columns:
+              - column:
+                  name: chapter_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: class_sessions
+            baseColumnNames: chapter_id
+            referencedTableName: chapters
+            referencedColumnNames: id
+            constraintName: fk_sessions_chapter
+            onDelete: SET NULL
+        - addColumn:
+            tableName: course_materials
+            columns:
+              - column:
+                  name: chapter_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: course_materials
+            baseColumnNames: chapter_id
+            referencedTableName: chapters
+            referencedColumnNames: id
+            constraintName: fk_materials_chapter
+            onDelete: SET NULL
+        - rollback:
+            - dropTable:
+                tableName: chapters
+            - dropForeignKeyConstraint:
+                baseTableName: class_sessions
+                constraintName: fk_sessions_chapter
+            - dropColumn:
+                tableName: class_sessions
+                columnName: chapter_id
+            - dropForeignKeyConstraint:
+                baseTableName: course_materials
+                constraintName: fk_materials_chapter
+            - dropColumn:
+                tableName: course_materials
+                columnName: chapter_id
+
+  - changeSet:
+      id: 016-create-course-faculties
+      author: veportal
+      changes:
+        - createTable:
+            tableName: course_faculties
+            columns:
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: faculty_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: course_faculties
+            columnNames: course_id, faculty_id
+            constraintName: pk_course_faculties
+        - addForeignKeyConstraint:
+            baseTableName: course_faculties
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_course_faculties_course
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: course_faculties
+            baseColumnNames: faculty_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_course_faculties_faculty
+            onDelete: CASCADE
+        - rollback:
+            - dropTable:
+                tableName: course_faculties
+
+  - changeSet:
+      id: 016-create-course-students
+      author: veportal
+      changes:
+        - createTable:
+            tableName: course_students
+            columns:
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: student_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: course_students
+            columnNames: course_id, student_id
+            constraintName: pk_course_students
+        - addForeignKeyConstraint:
+            baseTableName: course_students
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_course_students_course
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: course_students
+            baseColumnNames: student_id
+            referencedTableName: students
+            referencedColumnNames: id
+            constraintName: fk_course_students_student
+            onDelete: CASCADE
+        - rollback:
+            - dropTable:
+                tableName: course_students

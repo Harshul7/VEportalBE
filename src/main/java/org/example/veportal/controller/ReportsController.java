@@ -2,8 +2,8 @@ package org.example.veportal.controller;
 
 import java.util.List;
 import org.example.veportal.dto.ApiResponse;
-import org.example.veportal.entity.TestDataStudent;
-import org.example.veportal.repository.TestDataStudentRepository;
+import org.example.veportal.entity.Student;
+import org.example.veportal.repository.StudentRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -15,17 +15,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/reports")
 public class ReportsController {
 
-    private final TestDataStudentRepository testDataStudentRepository;
+    private final StudentRepository studentRepository;
 
-    public ReportsController(TestDataStudentRepository testDataStudentRepository) {
-        this.testDataStudentRepository = testDataStudentRepository;
+    public ReportsController(StudentRepository studentRepository) {
+        this.studentRepository = studentRepository;
     }
 
     @GetMapping("/students/{id}/performance")
     public ResponseEntity<ApiResponse<StudentPerformanceReport>> studentPerformance(
             @PathVariable Long id,
             @RequestParam(name = "courseId", required = false) Long courseId) {
-        TestDataStudent s = testDataStudentRepository.findById(id).orElse(null);
+        Student s = studentRepository.findById(id).orElse(null);
         if (s == null) {
             return ResponseEntity.ok(ApiResponse.error("Student not found"));
         }

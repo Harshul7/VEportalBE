@@ -29,17 +29,20 @@ public class AttendanceService {
     private final SessionService sessionService;
     private final AcademicMapper academicMapper;
     private final ActivityService activityService;
+    private final org.example.veportal.repository.CourseStudentRepository courseStudentRepository;
 
     public AttendanceService(AttendanceRecordRepository attendanceRepository,
                              StudentRepository studentRepository,
                              SessionService sessionService,
                              AcademicMapper academicMapper,
-                             ActivityService activityService) {
+                             ActivityService activityService,
+                             org.example.veportal.repository.CourseStudentRepository courseStudentRepository) {
         this.attendanceRepository = attendanceRepository;
         this.studentRepository = studentRepository;
         this.sessionService = sessionService;
         this.academicMapper = academicMapper;
         this.activityService = activityService;
+        this.courseStudentRepository = courseStudentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -56,8 +59,12 @@ public class AttendanceService {
                 (root, query, cb) -> cb.equal(root.get("status"), org.example.veportal.entity.AccountStatus.ACTIVE),
                 sort);
 
+        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
+                .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
+
         String term = search == null ? "" : search.trim().toLowerCase();
         return students.stream()
+                .filter(student -> enrolledIds.isEmpty() || enrolledIds.contains(student.getId()))
                 .filter(student -> term.isEmpty()
                         || student.getFullName().toLowerCase().contains(term)
                         || student.getStudentCode().toLowerCase().contains(term)
