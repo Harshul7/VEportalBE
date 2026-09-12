@@ -13,6 +13,7 @@ import org.example.veportal.entity.CourseMaterial;
 import org.example.veportal.entity.Role;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.entity.Student;
+import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
@@ -24,6 +25,7 @@ import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.StudentRepository;
+import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.security.AuthenticatedUserProvider;
 import org.example.veportal.service.SessionService;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +52,7 @@ public class FacultyController {
     private final ChapterRepository chapterRepository;
     private final CourseStudentRepository courseStudentRepository;
     private final AcademicYearRepository academicYearRepository;
+    private final TopicRepository topicRepository;
 
     public FacultyController(AuthenticatedUserProvider authenticatedUserProvider,
                              CourseRepository courseRepository,
@@ -61,7 +64,8 @@ public class FacultyController {
                              CourseFacultyRepository courseFacultyRepository,
                              ChapterRepository chapterRepository,
                              CourseStudentRepository courseStudentRepository,
-                             AcademicYearRepository academicYearRepository) {
+                             AcademicYearRepository academicYearRepository,
+                             TopicRepository topicRepository) {
         this.authenticatedUserProvider = authenticatedUserProvider;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -73,6 +77,7 @@ public class FacultyController {
         this.chapterRepository = chapterRepository;
         this.courseStudentRepository = courseStudentRepository;
         this.academicYearRepository = academicYearRepository;
+        this.topicRepository = topicRepository;
     }
 
     private List<Course> coursesForCurrentUser(UserAccount currentUser) {
@@ -146,11 +151,21 @@ public class FacultyController {
         if (!canAccessCourse(currentUser, courseId)) {
             return ResponseEntity.ok(ApiResponse.error("Course not accessible"));
         }
+
         List<ChapterItem> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAscChapterNumberAsc(courseId)
                 .stream()
                 .map(this::toChapterItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(chapters, "Chapters retrieved"));
+    }
+
+    @GetMapping("/chapters/{chapterId}/topics")
+    public ResponseEntity<ApiResponse<List<TopicItem>>> topics(@PathVariable Long chapterId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                topicRepository.findByChapterIdAndStatusOrderByDisplayOrderAscIdAsc(chapterId, "ACTIVE")
+                        .stream().map(t -> new TopicItem(t.getId(), t.getTitle(),
+                                t.getDescription() == null ? "" : t.getDescription())).toList(),
+                "Topics retrieved"));
     }
 
     @GetMapping("/courses/{courseId}/students")
@@ -221,6 +236,12 @@ public class FacultyController {
                     .filter(ch -> ch.getCourse().getId().equals(course.getId()))
                     .ifPresent(session::setChapter);
         }
+        if (body.topicId() != null) {
+            topicRepository.findById(body.topicId())
+                    .filter(topic -> body.chapterId() == null
+                            || topic.getChapter().getId().equals(body.chapterId()))
+                    .ifPresent(session::setTopicEntity);
+        }
         session.setTopic(body.topic() == null || body.topic().isBlank()
                 ? "Class Session on " + (body.sessionDate() == null ? LocalDate.now() : LocalDate.parse(body.sessionDate()))
                 : body.topic().trim());
@@ -275,6 +296,8 @@ public class FacultyController {
             String createdAt
     ) {}
 
+    public record TopicItem(long id, String title, String description) {}
+
     public record CourseStudentItem(
             long id, String name, String rollNumber, String programme
     ) {}
@@ -325,6 +348,7 @@ public class FacultyController {
     public record SessionCreateBodyRequest(
             Long courseId,
             Long chapterId,
+            Long topicId,
             String sessionDate,
             String topic,
             String description,

@@ -31,3 +31,5 @@ databaseChangeLog:
       file: db/changelog/changes/015-add-must-change-password-to-users.yaml
   - include:
       file: db/changelog/changes/016-academic-years-chapters-mappings.yaml
+  - include:
+      file: db/changelog/changes/017-create-topics.yaml

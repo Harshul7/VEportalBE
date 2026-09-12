@@ -30,6 +30,18 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
 
     Optional<AttendanceRecord> findBySessionIdAndStudentId(Long sessionId, Long studentId);
 
+    @Query("""
+            select a from AttendanceRecord a
+            join fetch a.session ses
+            left join fetch ses.chapter
+            left join fetch ses.topicEntity
+            where a.student.id = :studentId
+              and (:courseId is null or ses.course.id = :courseId)
+            order by ses.sessionDate asc, ses.sessionNumber asc
+            """)
+    List<AttendanceRecord> findStudentHistory(@Param("studentId") Long studentId,
+                                              @Param("courseId") Long courseId);
+
     long countByStatus(AttendanceStatus status);
 
     @Query("""

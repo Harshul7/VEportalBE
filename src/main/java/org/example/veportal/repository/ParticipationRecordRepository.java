@@ -30,6 +30,17 @@ public interface ParticipationRecordRepository extends JpaRepository<Participati
     Optional<ParticipationRecord> findBySessionIdAndStudentId(Long sessionId, Long studentId);
 
     @Query("""
+            select p from ParticipationRecord p
+            join fetch p.session ses
+            where p.student.id = :studentId
+              and (:courseId is null or ses.course.id = :courseId)
+              and p.level <> org.example.veportal.entity.ParticipationLevel.NOT_RECORDED
+            order by ses.sessionDate asc, ses.sessionNumber asc
+            """)
+    List<ParticipationRecord> findStudentHistory(@Param("studentId") Long studentId,
+                                                  @Param("courseId") Long courseId);
+
+    @Query("""
             select count(distinct p.session.id) from ParticipationRecord p
             where p.level <> org.example.veportal.entity.ParticipationLevel.NOT_RECORDED
             """)

@@ -18,6 +18,7 @@ import org.example.veportal.entity.CourseFaculty;
 import org.example.veportal.entity.CourseStudent;
 import org.example.veportal.entity.Role;
 import org.example.veportal.entity.Student;
+import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
@@ -28,6 +29,7 @@ import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.StudentRepository;
+import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.service.MailService;
 import org.example.veportal.util.Percent;
@@ -61,6 +63,7 @@ public class AdminController {
     private final CourseFacultyRepository courseFacultyRepository;
     private final CourseStudentRepository courseStudentRepository;
     private final StudentRepository studentRepository;
+    private final TopicRepository topicRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
 
@@ -73,6 +76,7 @@ public class AdminController {
                            CourseFacultyRepository courseFacultyRepository,
                            CourseStudentRepository courseStudentRepository,
                            StudentRepository studentRepository,
+                           TopicRepository topicRepository,
                            PasswordEncoder passwordEncoder,
                            MailService mailService) {
         this.userAccountRepository = userAccountRepository;
@@ -84,6 +88,7 @@ public class AdminController {
         this.courseFacultyRepository = courseFacultyRepository;
         this.courseStudentRepository = courseStudentRepository;
         this.studentRepository = studentRepository;
+        this.topicRepository = topicRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
     }
@@ -437,6 +442,35 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(toChapterItem(saved, courseId), "Chapter created"));
     }
 
+    @GetMapping("/chapters/{chapterId}/topics")
+    public ResponseEntity<ApiResponse<List<TopicItem>>> topics(@PathVariable Long chapterId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                topicRepository.findByChapterIdAndStatusOrderByDisplayOrderAscIdAsc(chapterId, "ACTIVE")
+                        .stream().map(this::toTopicItem).toList(), "Topics retrieved"));
+    }
+
+    @PostMapping("/chapters/{chapterId}/topics")
+    public ResponseEntity<ApiResponse<TopicItem>> createTopic(@PathVariable Long chapterId,
+                                                               @RequestBody CreateTopicRequest request) {
+        Chapter chapter = chapterRepository.findById(chapterId).orElse(null);
+        if (chapter == null) {
+            return ResponseEntity.ok(ApiResponse.error("Chapter not found"));
+        }
+        Topic topic = new Topic();
+        topic.setChapter(chapter);
+        topic.setTitle(request.title() == null ? "" : request.title().trim());
+        topic.setDescription(request.description());
+        topic.setDisplayOrder(request.displayOrder() == null ? 0 : request.displayOrder());
+        topic.setStatus("ACTIVE");
+        return ResponseEntity.ok(ApiResponse.success(toTopicItem(topicRepository.save(topic)), "Topic created"));
+    }
+
+    private TopicItem toTopicItem(Topic topic) {
+        return new TopicItem(topic.getId(), topic.getTitle(),
+                topic.getDescription() == null ? "" : topic.getDescription(),
+                topic.getDisplayOrder() == null ? 0 : topic.getDisplayOrder(), topic.getStatus());
+    }
+
     @DeleteMapping("/courses/{courseId}/chapters/{chapterId}")
     public ResponseEntity<ApiResponse<Object>> deleteChapter(@PathVariable Long courseId,
                                                              @PathVariable Long chapterId) {
@@ -756,6 +790,8 @@ public class AdminController {
                                       Long academicYearId) {}
 
     public record CreateChapterRequest(String title, String description) {}
+    public record CreateTopicRequest(String title, String description, Integer displayOrder) {}
+    public record TopicItem(long id, String title, String description, int displayOrder, String status) {}
 
     public record AssignFacultyRequest(List<Long> facultyIds) {}
 

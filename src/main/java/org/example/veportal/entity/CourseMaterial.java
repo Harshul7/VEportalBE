@@ -26,6 +26,10 @@ public class CourseMaterial extends BaseEntity {
     @JoinColumn(name = "chapter_id")
     private Chapter chapter;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private Topic topic;
+
     @Column(name = "title", nullable = false, length = 200)
     private String title;
 
@@ -71,6 +75,14 @@ public class CourseMaterial extends BaseEntity {
 
     public void setChapter(Chapter chapter) {
         this.chapter = chapter;
+    }
+
+    public Topic getTopic() {
+        return topic;
+    }
+
+    public void setTopic(Topic topic) {
+        this.topic = topic;
     }
 
     public String getTitle() {

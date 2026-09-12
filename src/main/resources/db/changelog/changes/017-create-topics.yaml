@@ -1,0 +1,95 @@
+databaseChangeLog:
+  - changeSet:
+      id: 017-create-topics
+      author: veportal
+      changes:
+        - createTable:
+            tableName: topics
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: chapter_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: varchar(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: varchar(2000)
+              - column:
+                  name: display_order
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(20)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by
+                  type: varchar(120)
+              - column:
+                  name: updated_at
+                  type: datetime(6)
+                  defaultValueComputed: CURRENT_TIMESTAMP(6)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_by
+                  type: varchar(120)
+        - addUniqueConstraint:
+            tableName: topics
+            columnNames: chapter_id, title
+            constraintName: uq_topics_chapter_title
+        - addForeignKeyConstraint:
+            baseTableName: topics
+            baseColumnNames: chapter_id
+            referencedTableName: chapters
+            referencedColumnNames: id
+            constraintName: fk_topics_chapter
+            onDelete: CASCADE
+        - addColumn:
+            tableName: class_sessions
+            columns:
+              - column:
+                  name: topic_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: class_sessions
+            baseColumnNames: topic_id
+            referencedTableName: topics
+            referencedColumnNames: id
+            constraintName: fk_sessions_topic
+            onDelete: SET NULL
+        - addColumn:
+            tableName: course_materials
+            columns:
+              - column:
+                  name: topic_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: course_materials
+            baseColumnNames: topic_id
+            referencedTableName: topics
+            referencedColumnNames: id
+            constraintName: fk_materials_topic
+            onDelete: SET NULL

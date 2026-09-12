@@ -14,6 +14,8 @@ public record MaterialCreateRequest(
 
         String sessionId,
 
+        String topicId,
+
         @Size(max = 1000, message = "Description must be at most 1000 characters")
         String description,
 

@@ -14,6 +14,7 @@ import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.mapper.AcademicMapper;
 import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
+import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.util.Labels;
 import org.example.veportal.util.SizeFormat;
 import org.springframework.data.domain.Page;
@@ -33,17 +34,20 @@ public class MaterialService {
     private final CurrentCourseProvider currentCourseProvider;
     private final AcademicMapper academicMapper;
     private final ActivityService activityService;
+    private final TopicRepository topicRepository;
 
     public MaterialService(CourseMaterialRepository materialRepository,
                            ClassSessionRepository sessionRepository,
                            CurrentCourseProvider currentCourseProvider,
                            AcademicMapper academicMapper,
-                           ActivityService activityService) {
+                           ActivityService activityService,
+                           TopicRepository topicRepository) {
         this.materialRepository = materialRepository;
         this.sessionRepository = sessionRepository;
         this.currentCourseProvider = currentCourseProvider;
         this.academicMapper = academicMapper;
         this.activityService = activityService;
+        this.topicRepository = topicRepository;
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +108,14 @@ public class MaterialService {
         CourseMaterial material = new CourseMaterial();
         material.setCourse(course);
         material.setSession(session);
+        if (request.topicId() != null && !request.topicId().isBlank()) {
+            try {
+                material.setTopic(topicRepository.findById(Long.parseLong(request.topicId().trim()))
+                        .orElseThrow(() -> NotFoundException.resource("Topic", request.topicId())));
+            } catch (NumberFormatException e) {
+                throw new BusinessException("Invalid topic reference: " + request.topicId());
+            }
+        }
         material.setTitle(request.title().trim());
         material.setType(type);
         material.setDescription(request.description() == null || request.description().isBlank()

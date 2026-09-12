@@ -25,6 +25,10 @@ public class ClassSession extends BaseEntity {
     @JoinColumn(name = "chapter_id")
     private Chapter chapter;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private Topic topicEntity;
+
     @Column(name = "session_number", nullable = false)
     private Integer sessionNumber;
 
@@ -65,6 +69,14 @@ public class ClassSession extends BaseEntity {
 
     public void setChapter(Chapter chapter) {
         this.chapter = chapter;
+    }
+
+    public Topic getTopicEntity() {
+        return topicEntity;
+    }
+
+    public void setTopicEntity(Topic topicEntity) {
+        this.topicEntity = topicEntity;
     }
 
     public Integer getSessionNumber() {
