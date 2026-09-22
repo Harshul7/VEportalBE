@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TopicRepository extends JpaRepository<Topic, Long> {
     List<Topic> findByChapterIdAndStatusOrderByDisplayOrderAscIdAsc(Long chapterId, String status);
+    List<Topic> findByChapterIdOrderByDisplayOrderAscIdAsc(Long chapterId);
 }

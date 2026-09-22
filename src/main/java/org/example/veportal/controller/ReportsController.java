@@ -12,6 +12,7 @@ import org.example.veportal.entity.Student;
 import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ParticipationRecordRepository;
 import org.example.veportal.repository.StudentRepository;
+import org.example.veportal.service.ExportService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -26,13 +27,16 @@ public class ReportsController {
     private final StudentRepository studentRepository;
     private final AttendanceRecordRepository attendanceRepository;
     private final ParticipationRecordRepository participationRepository;
+    private final ExportService exportService;
 
     public ReportsController(StudentRepository studentRepository,
                              AttendanceRecordRepository attendanceRepository,
-                             ParticipationRecordRepository participationRepository) {
+                             ParticipationRecordRepository participationRepository,
+                             ExportService exportService) {
         this.studentRepository = studentRepository;
         this.attendanceRepository = attendanceRepository;
         this.participationRepository = participationRepository;
+        this.exportService = exportService;
     }
 
     @GetMapping("/students/{id}/performance")
@@ -81,7 +85,8 @@ public class ReportsController {
 
     @GetMapping(value = "/students/{id}/performance/export", produces = "text/csv")
     public ResponseEntity<byte[]> exportStudentPerformance(@PathVariable Long id,
-                                                            @RequestParam(name = "courseId", required = false) Long courseId) {
+                                                            @RequestParam(name = "courseId", required = false) Long courseId,
+                                                            @RequestParam(name = "format", defaultValue = "csv") String format) {
         Student student = studentRepository.findById(id).orElseThrow(() ->
                 org.example.veportal.exception.NotFoundException.resource("Student", id));
         List<AttendanceRecord> records = attendanceRepository.findStudentHistory(id, courseId);
@@ -89,9 +94,15 @@ public class ReportsController {
         StringBuilder csv = new StringBuilder("Roll Number,Name,Branch,Section,Date,Chapter,Status,Participation,Participation Notes\n");
         Map<Long, ParticipationRecord> participationBySession = new LinkedHashMap<>();
         participationRepository.findStudentHistory(id, courseId).forEach(p -> participationBySession.put(p.getSession().getId(), p));
+        List<List<String>> rows = new ArrayList<>();
         for (AttendanceRecord record : records) {
             var chapter = record.getSession().getChapter();
             ParticipationRecord participation = participationBySession.get(record.getSession().getId());
+            List<String> row = List.of(student.getStudentCode(), student.getFullName(), student.getProgramme(), student.getBatch(),
+                    String.valueOf(record.getSession().getSessionDate()), chapter == null ? "" : chapter.getChapterNumber() + " - " + chapter.getTitle(),
+                    record.getStatus().name(), participation == null ? "" : participation.getLevel().name(),
+                    participation == null ? "" : participation.getNotes());
+            rows.add(row);
             csv.append(csv(student.getStudentCode())).append(',')
                     .append(csv(student.getFullName())).append(',')
                     .append(csv(student.getProgramme())).append(',')
@@ -105,6 +116,18 @@ public class ReportsController {
         csv.append("\nSummary,,,,,,,,\nPresent,").append(present)
                 .append(",Total,").append(records.size())
                 .append(",Attendance %," ).append(records.isEmpty() ? "0" : String.format(java.util.Locale.ROOT, "%.2f", present * 100.0 / records.size())).append('\n');
+        if ("pdf".equalsIgnoreCase(format) || "xlsx".equalsIgnoreCase(format)) {
+            List<String> headers = List.of("Roll Number", "Name", "Branch", "Batch", "Date", "Chapter", "Status", "Participation", "Participation Notes");
+            byte[] body = "pdf".equalsIgnoreCase(format)
+                    ? exportService.pdf("Student Performance - " + student.getFullName(), headers, rows)
+                    : exportService.xlsx("Student Performance", headers, rows);
+            String extension = format.toLowerCase();
+            MediaType contentType = "pdf".equalsIgnoreCase(format) ? MediaType.APPLICATION_PDF
+                    : MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=\"student-performance-" + student.getStudentCode() + "." + extension + "\"")
+                    .contentType(contentType).body(body);
+        }
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"student-performance-" + student.getStudentCode() + ".csv\"")
                 .contentType(MediaType.parseMediaType("text/csv"))
