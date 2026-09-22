@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api")
@@ -32,12 +33,14 @@ public class TeachingLogController {
     }
 
     @GetMapping("/sessions/{sessionId}/teaching-log")
+    @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId)")
     public ResponseEntity<ApiResponse<TeachingLogResponse>> forSession(@PathVariable Long sessionId) {
         TeachingLogResponse response = teachingLogService.forSession(sessionId);
         return ResponseEntity.ok(ApiResponse.success(response, "Teaching log retrieved"));
     }
 
     @PutMapping("/sessions/{sessionId}/teaching-log")
+    @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId)")
     public ResponseEntity<ApiResponse<TeachingLogResponse>> upsert(
             @PathVariable Long sessionId,
             @Valid @RequestBody TeachingLogSaveRequest request) {

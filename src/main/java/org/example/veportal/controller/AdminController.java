@@ -12,6 +12,7 @@ import org.example.veportal.dto.ApiResponse;
 import org.example.veportal.dto.PagedResult;
 import org.example.veportal.entity.AccountStatus;
 import org.example.veportal.entity.AcademicYear;
+import org.example.veportal.entity.Branch;
 import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.Course;
 import org.example.veportal.entity.CourseFaculty;
@@ -22,6 +23,7 @@ import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
+import org.example.veportal.repository.BranchRepository;
 import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.repository.ClassSessionRepository;
@@ -32,6 +34,7 @@ import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.service.MailService;
+import org.example.veportal.service.AuthService;
 import org.example.veportal.util.Percent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +42,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -52,6 +56,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/admin")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
     private final UserAccountRepository userAccountRepository;
@@ -59,6 +64,7 @@ public class AdminController {
     private final ClassSessionRepository sessionRepository;
     private final AttendanceRecordRepository attendanceRepository;
     private final AcademicYearRepository academicYearRepository;
+    private final BranchRepository branchRepository;
     private final ChapterRepository chapterRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final CourseStudentRepository courseStudentRepository;
@@ -66,24 +72,28 @@ public class AdminController {
     private final TopicRepository topicRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
+    private final AuthService authService;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
                            ClassSessionRepository sessionRepository,
                            AttendanceRecordRepository attendanceRepository,
                            AcademicYearRepository academicYearRepository,
+                           BranchRepository branchRepository,
                            ChapterRepository chapterRepository,
                            CourseFacultyRepository courseFacultyRepository,
                            CourseStudentRepository courseStudentRepository,
                            StudentRepository studentRepository,
                            TopicRepository topicRepository,
                            PasswordEncoder passwordEncoder,
-                           MailService mailService) {
+                           MailService mailService,
+                           AuthService authService) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
         this.attendanceRepository = attendanceRepository;
         this.academicYearRepository = academicYearRepository;
+        this.branchRepository = branchRepository;
         this.chapterRepository = chapterRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.courseStudentRepository = courseStudentRepository;
@@ -91,6 +101,7 @@ public class AdminController {
         this.topicRepository = topicRepository;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
+        this.authService = authService;
     }
 
     @GetMapping("/dashboard")
@@ -127,9 +138,11 @@ public class AdminController {
                     cb.like(cb.lower(root.get("email")), pattern)));
         }
         if (branchId != null && branchId > 0) {
-            String programme = branchNameForId(branchId);
-            if (!"General".equals(programme)) {
-                spec = spec.and((root, query, cb) -> cb.equal(root.get("programme"), programme));
+            Branch branch = branchRepository.findById(branchId).orElse(null);
+            if (branch != null) {
+                spec = spec.and((root, query, cb) -> cb.or(
+                        cb.equal(root.get("branchCode"), branch.getCode()),
+                        cb.equal(root.get("programme"), branch.getName())));
             }
         }
         Page<Student> result = studentRepository.findAll(spec,
@@ -161,6 +174,7 @@ public class AdminController {
         s.setEmail(request.email() == null || request.email().isBlank()
                 ? deriveEmail(request.name()) : request.email().trim());
         s.setProgramme(branchNameForId(request.branchId()));
+        s.setBranchCode(branchCodeForId(request.branchId()));
         s.setStatus(AccountStatus.ACTIVE);
         s.setBatch(academicYearBatchName(request.academicYearId()));
         Student saved = studentRepository.save(s);
@@ -185,6 +199,7 @@ public class AdminController {
         }
         if (request.branchId() != null) {
             s.setProgramme(branchNameForId(request.branchId()));
+            s.setBranchCode(branchCodeForId(request.branchId()));
         }
         if (request.academicYearId() != null) {
             s.setBatch(academicYearBatchName(request.academicYearId()));
@@ -255,13 +270,12 @@ public class AdminController {
         user.setDepartment(request.department() == null ? "" : request.department().trim());
         user.setRole(Role.FACULTY);
         user.setStatus(AccountStatus.ACTIVE);
-        String temporaryPassword = generateTemporaryPassword();
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
         UserAccount saved = userAccountRepository.save(user);
-        mailService.sendCredentials(saved.getEmail(), saved.getFullName(), saved.getEmail(), temporaryPassword);
+        authService.issuePasswordSetup(saved);
         return ResponseEntity.ok(ApiResponse.success(
-                toFacultyItem(saved, temporaryPassword), "Faculty created; use the temporary password to sign in"));
+                toFacultyItem(saved), "Faculty created; an activation link was sent by email"));
     }
 
     @PostMapping("/faculty/{id}/account")
@@ -277,15 +291,14 @@ public class AdminController {
             user.setRole(Role.FACULTY);
         }
         user.setStatus(AccountStatus.ACTIVE);
-        String temporaryPassword = generateTemporaryPassword();
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
         UserAccount saved = userAccountRepository.save(user);
         if (request.sendEmail() == null || request.sendEmail()) {
-            mailService.sendCredentials(saved.getEmail(), saved.getFullName(), saved.getEmail(), temporaryPassword);
+            authService.issuePasswordSetup(saved);
         }
         return ResponseEntity.ok(ApiResponse.success(
-                toFacultyItem(saved, temporaryPassword), "Account activated; use the temporary password to sign in"));
+                toFacultyItem(saved), "Account activated; an activation link was sent by email"));
     }
 
     @PatchMapping("/faculty/{id}/status")
@@ -306,26 +319,18 @@ public class AdminController {
         if (user == null) {
             return ResponseEntity.ok(ApiResponse.error("Faculty not found"));
         }
-        String temporaryPassword = generateTemporaryPassword();
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
         userAccountRepository.save(user);
-        mailService.sendCredentials(user.getEmail(), user.getFullName(), user.getEmail(), temporaryPassword);
-        return ResponseEntity.ok(ApiResponse.success(
-                java.util.Map.of("temporaryPassword", temporaryPassword),
-                "Password reset; new temporary password generated"));
+        authService.issuePasswordSetup(user);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password setup link sent by email"));
     }
 
     @GetMapping("/branches")
     public ResponseEntity<ApiResponse<List<BranchItem>>> listBranches() {
-        List<BranchItem> branches = new ArrayList<>();
-        int id = 1;
-        for (String programme : studentRepository.findDistinctProgrammes()) {
-            branches.add(new BranchItem(id++, programme, programme, true, LocalDateTime.now().toString()));
-        }
-        if (branches.isEmpty()) {
-            branches.add(new BranchItem(1, "B.Tech CSE", "B.Tech CSE", true, LocalDateTime.now().toString()));
-        }
+        List<BranchItem> branches = branchRepository.findByActiveTrueOrderByCodeAsc().stream()
+                .map(b -> new BranchItem(b.getId(), b.getCode(), b.getName(), b.isActive(),
+                        b.getCreatedAt() == null ? "" : b.getCreatedAt().toString())).toList();
         return ResponseEntity.ok(ApiResponse.success(branches, "Branches retrieved"));
     }
 
@@ -334,8 +339,13 @@ public class AdminController {
         String name = request.name() == null || request.name().isBlank()
                 ? (request.code() == null ? "New Branch" : request.code()) : request.name().trim();
         String code = request.code() == null || request.code().isBlank() ? name : request.code().trim();
-        BranchItem created = new BranchItem(999L, code, name, true, LocalDateTime.now().toString());
-        return ResponseEntity.ok(ApiResponse.success(created, "Branch created"));
+        Branch branch = new Branch();
+        branch.setCode(code.toUpperCase());
+        branch.setName(name);
+        branch.setActive(true);
+        Branch saved = branchRepository.save(branch);
+        return ResponseEntity.ok(ApiResponse.success(new BranchItem(saved.getId(), saved.getCode(), saved.getName(),
+                saved.isActive(), saved.getCreatedAt() == null ? "" : saved.getCreatedAt().toString()), "Branch created"));
     }
 
     @GetMapping("/academic-years")
@@ -478,8 +488,9 @@ public class AdminController {
         if (chapter == null || !chapter.getCourse().getId().equals(courseId)) {
             return ResponseEntity.ok(ApiResponse.error("Chapter not found"));
         }
-        chapterRepository.delete(chapter);
-        return ResponseEntity.ok(ApiResponse.success(null, "Chapter deleted"));
+        chapter.setStatus("ARCHIVED");
+        chapterRepository.save(chapter);
+        return ResponseEntity.ok(ApiResponse.success(null, "Chapter archived"));
     }
 
     @GetMapping("/courses/{courseId}/faculties")
@@ -513,7 +524,8 @@ public class AdminController {
             }
         }
         for (Long facultyId : facultyIds) {
-            if (!currentIds.contains(facultyId) && userAccountRepository.existsById(facultyId)) {
+            if (!currentIds.contains(facultyId) && userAccountRepository.findById(facultyId)
+                    .filter(u -> u.getRole() == Role.FACULTY).isPresent()) {
                 courseFacultyRepository.save(new CourseFaculty(courseId, facultyId));
             }
         }
@@ -564,7 +576,7 @@ public class AdminController {
                 s.getStudentCode(),
                 s.getFullName(),
                 s.getEmail() == null ? "" : s.getEmail(),
-                null,
+                s.getBranchCode() == null ? null : branchRepository.findByCodeIgnoreCase(s.getBranchCode()).map(Branch::getId).orElse(null),
                 s.getProgramme(),
                 s.getProgramme(),
                 1,
@@ -574,10 +586,6 @@ public class AdminController {
     }
 
     private FacultyListItem toFacultyItem(UserAccount u) {
-        return toFacultyItem(u, null);
-    }
-
-    private FacultyListItem toFacultyItem(UserAccount u, String temporaryPassword) {
         return new FacultyListItem(
                 u.getId(),
                 u.getStaffCode(),
@@ -588,8 +596,7 @@ public class AdminController {
                 u.getRole().name(),
                 u.getStatus() == AccountStatus.ACTIVE,
                 true,
-                u.getCreatedAt().toString(),
-                temporaryPassword
+                u.getCreatedAt().toString()
         );
     }
 
@@ -648,11 +655,12 @@ public class AdminController {
         if (branchId == null || branchId <= 0) {
             return "General";
         }
-        List<String> programmes = studentRepository.findDistinctProgrammes();
-        if (branchId - 1 < programmes.size()) {
-            return programmes.get(branchId.intValue() - 1);
-        }
-        return "General";
+        return branchRepository.findById(branchId).map(Branch::getName).orElse("General");
+    }
+
+    private String branchCodeForId(Long branchId) {
+        if (branchId == null || branchId <= 0) return null;
+        return branchRepository.findById(branchId).map(Branch::getCode).orElse(null);
     }
 
     private String academicYearBatchName(Long academicYearId) {
@@ -738,8 +746,7 @@ public class AdminController {
     public record FacultyListItem(
             long id, String facultyId, String name, String email,
             String employeeId, String department, String role,
-            boolean active, boolean hasAccount, String createdAt,
-            String temporaryPassword
+            boolean active, boolean hasAccount, String createdAt
     ) {}
 
     public record CourseListItem(

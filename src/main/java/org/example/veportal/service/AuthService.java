@@ -5,10 +5,19 @@ import org.example.veportal.dto.response.AuthResponse;
 import org.example.veportal.dto.response.UserResponse;
 import org.example.veportal.entity.AccountStatus;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.entity.PasswordResetToken;
+import org.example.veportal.repository.PasswordResetTokenRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.HexFormat;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.mapper.UserMapper;
 import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.security.JwtService;
+import org.example.veportal.security.LoginAttemptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -26,29 +35,47 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserMapper userMapper;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final MailService mailService;
+    private final LoginAttemptService loginAttemptService;
 
     public AuthService(UserAccountRepository userAccountRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
-                       UserMapper userMapper) {
+                       UserMapper userMapper,
+                       PasswordResetTokenRepository passwordResetTokenRepository,
+                       MailService mailService,
+                       LoginAttemptService loginAttemptService) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userMapper = userMapper;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.mailService = mailService;
+        this.loginAttemptService = loginAttemptService;
     }
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
+        String loginKey = request.email() == null ? "" : request.email().trim();
+        if (loginAttemptService.isBlocked(loginKey)) {
+            throw new BadCredentialsException("Invalid email or password");
+        }
         UserAccount account = userAccountRepository.findByEmailIgnoreCase(request.email().trim())
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+                .orElseThrow(() -> {
+                    loginAttemptService.failed(loginKey);
+                    return new BadCredentialsException("Invalid email or password");
+                });
         if (account.getStatus() != AccountStatus.ACTIVE) {
             log.warn("Login attempt for inactive account: {}", account.getEmail());
             throw new DisabledException("Account is inactive");
         }
         if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
+            loginAttemptService.failed(loginKey);
             log.warn("Failed login attempt for account: {}", account.getEmail());
             throw new BadCredentialsException("Invalid email or password");
         }
+        loginAttemptService.succeeded(loginKey);
         String token = jwtService.generate(account);
         UserResponse user = userMapper.toResponse(account);
         return new AuthResponse(token, user);
@@ -76,12 +103,45 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(String token, String newPassword) {
-        String email = jwtService.extractSubject(token);
-        UserAccount account = userAccountRepository.findByEmailIgnoreCase(email)
+        PasswordResetToken reset = passwordResetTokenRepository.findByTokenHash(hashToken(token))
+                .filter(t -> t.getUsedAt() == null && t.getExpiresAt().isAfter(LocalDateTime.now()))
                 .orElseThrow(() -> new BadCredentialsException("Invalid reset token"));
+        UserAccount account = reset.getUser();
         account.setPasswordHash(passwordEncoder.encode(newPassword));
         account.setMustChangePassword(false);
         userAccountRepository.save(account);
-        log.info("Password reset for account: {}", email);
+        reset.setUsedAt(LocalDateTime.now());
+        passwordResetTokenRepository.save(reset);
+        log.info("Password reset for account: {}", account.getEmail());
+    }
+
+    @Transactional
+    public void requestPasswordReset(String email) {
+        userAccountRepository.findByEmailIgnoreCase(email.trim()).ifPresent(account -> {
+            issuePasswordSetup(account);
+        });
+    }
+
+    @Transactional
+    public void issuePasswordSetup(UserAccount account) {
+        passwordResetTokenRepository.deleteByUserId(account.getId());
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        String raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        PasswordResetToken reset = new PasswordResetToken();
+        reset.setUser(account);
+        reset.setTokenHash(hashToken(raw));
+        reset.setExpiresAt(LocalDateTime.now().plusMinutes(30));
+        passwordResetTokenRepository.save(reset);
+        mailService.sendPasswordReset(account.getEmail(), account.getFullName(), raw);
+    }
+
+    private String hashToken(String raw) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(raw.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to hash reset token", e);
+        }
     }
 }

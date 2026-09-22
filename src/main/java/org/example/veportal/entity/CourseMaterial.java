@@ -46,6 +46,12 @@ public class CourseMaterial extends BaseEntity {
     @Column(name = "size_bytes")
     private Long sizeBytes;
 
+    @Column(name = "storage_key", length = 255)
+    private String storageKey;
+
+    @Column(name = "content_type", length = 120)
+    private String contentType;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "uploaded_by_id", nullable = false)
     private UserAccount uploadedBy;
@@ -124,6 +130,14 @@ public class CourseMaterial extends BaseEntity {
     public void setSizeBytes(Long sizeBytes) {
         this.sizeBytes = sizeBytes;
     }
+
+    public String getStorageKey() { return storageKey; }
+
+    public void setStorageKey(String storageKey) { this.storageKey = storageKey; }
+
+    public String getContentType() { return contentType; }
+
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public UserAccount getUploadedBy() {
         return uploadedBy;

@@ -40,23 +40,21 @@ public class MailService {
         }
     }
 
-    public boolean sendCredentials(String recipient, String name, String userId, String temporaryPassword) {
-        String subject = "Your VE Faculty Portal account credentials";
+    public boolean sendPasswordReset(String recipient, String name, String token) {
+        String subject = "Reset your VE Faculty Portal password";
+        String link = mailProperties.portalUrl() + "/reset-password?token=" + token;
         String body = """
                 Hi %s,
 
-                Your account has been created on the VE Faculty Portal.
+                A password reset was requested for your VE Faculty Portal account.
+                Reset your password here: %s
 
-                Sign in here: %s
-                User ID (email): %s
-                Temporary password: %s
-
-                On your first sign in, you will be asked to set a new password.
+                This link expires in 30 minutes and can be used only once.
+                If you did not request this, you can safely ignore this message.
 
                 Regards,
                 VE Faculty Portal
-                """.formatted(name, mailProperties.portalUrl(), userId, temporaryPassword);
-
+                """.formatted(name, link);
         if (!configured) {
             log.info("[MAILPREVIEW] To: {} Subject: {}\n{}", recipient, subject, body);
             return true;
@@ -69,10 +67,9 @@ public class MailService {
             helper.setSubject(subject);
             helper.setText(body);
             mailSender.send(message);
-            log.info("Credentials email sent to {}", recipient);
             return true;
         } catch (Exception e) {
-            log.error("Failed to send credentials email to {}: {}", recipient, e.getMessage());
+            log.error("Failed to send password reset email to {}: {}", recipient, e.getMessage());
             return false;
         }
     }

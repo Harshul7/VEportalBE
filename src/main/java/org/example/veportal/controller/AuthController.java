@@ -11,6 +11,11 @@ import org.example.veportal.dto.response.UserResponse;
 import org.example.veportal.security.AuthenticatedUserProvider;
 import org.example.veportal.service.AuthService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import java.security.SecureRandom;
+import java.util.Base64;
+import org.example.veportal.config.AppProperties;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,16 +28,45 @@ public class AuthController {
 
     private final AuthService authService;
     private final AuthenticatedUserProvider authenticatedUserProvider;
+    private final AppProperties appProperties;
 
-    public AuthController(AuthService authService, AuthenticatedUserProvider authenticatedUserProvider) {
+    public AuthController(AuthService authService, AuthenticatedUserProvider authenticatedUserProvider,
+                          AppProperties appProperties) {
         this.authService = authService;
         this.authenticatedUserProvider = authenticatedUserProvider;
+        this.appProperties = appProperties;
     }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(ApiResponse.success(response, "Signed in successfully"));
+        ResponseCookie cookie = ResponseCookie.from(appProperties.jwt().cookieName(), response.token())
+                .httpOnly(true).secure(appProperties.jwt().cookieSecure()).sameSite("Lax")
+                .path("/").maxAge(appProperties.jwt().expirationMinutes() * 60).build();
+        ResponseCookie csrf = ResponseCookie.from("ve_csrf", csrfToken())
+                .secure(appProperties.jwt().cookieSecure()).sameSite("Lax").path("/")
+                .maxAge(appProperties.jwt().expirationMinutes() * 60).build();
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .header(HttpHeaders.SET_COOKIE, csrf.toString())
+                .body(ApiResponse.success(response, "Signed in successfully"));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout() {
+        ResponseCookie cookie = ResponseCookie.from(appProperties.jwt().cookieName(), "")
+                .httpOnly(true).secure(appProperties.jwt().cookieSecure()).sameSite("Lax")
+                .path("/").maxAge(0).build();
+        ResponseCookie csrf = ResponseCookie.from("ve_csrf", "")
+                .secure(appProperties.jwt().cookieSecure()).sameSite("Lax").path("/").maxAge(0).build();
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .header(HttpHeaders.SET_COOKIE, csrf.toString())
+                .body(ApiResponse.success(null, "Signed out successfully"));
+    }
+
+    private String csrfToken() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     @GetMapping("/me")
@@ -43,6 +77,7 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request.email());
         return ResponseEntity.ok(ApiResponse.success(null, "If an account exists, a reset link was sent"));
     }
 

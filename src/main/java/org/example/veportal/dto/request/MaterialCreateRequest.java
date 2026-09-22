@@ -16,6 +16,8 @@ public record MaterialCreateRequest(
 
         String topicId,
 
+        String chapterId,
+
         @Size(max = 1000, message = "Description must be at most 1000 characters")
         String description,
 

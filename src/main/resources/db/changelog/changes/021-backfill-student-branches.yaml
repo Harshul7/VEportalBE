@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 021-backfill-student-branches
+      author: veportal
+      changes:
+        - sql:
+            sql: >-
+              UPDATE students SET branch_code = CASE
+              WHEN UPPER(programme) LIKE '%CSE%' THEN 'CSE'
+              WHEN UPPER(programme) LIKE '%CSD%' THEN 'CSD'
+              WHEN UPPER(programme) LIKE '%CND%' THEN 'CND'
+              WHEN UPPER(programme) LIKE '%CHD%' THEN 'CHD'
+              WHEN UPPER(programme) LIKE '%CLD%' THEN 'CLD'
+              WHEN UPPER(programme) LIKE '%ECE%' THEN 'ECE'
+              WHEN UPPER(programme) LIKE '%ECD%' THEN 'ECD'
+              ELSE branch_code END
+              WHERE branch_code IS NULL

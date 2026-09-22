@@ -12,6 +12,7 @@ import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.entity.Role;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.mapper.SessionMapper;
 import org.example.veportal.repository.AttendanceRecordRepository;
@@ -55,7 +56,15 @@ public class SessionService {
 
     @Transactional(readOnly = true)
     public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size) {
+        return list(search, status, page, size, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size, UserAccount currentUser) {
         Specification<ClassSession> spec = (root, query, cb) -> cb.conjunction();
+        if (currentUser != null && currentUser.getRole() != Role.ADMIN) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("faculty").get("id"), currentUser.getId()));
+        }
         if (search != null && !search.isBlank()) {
             String term = search.trim().toLowerCase();
             spec = spec.and((root, query, cb) -> {

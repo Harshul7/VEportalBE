@@ -38,6 +38,8 @@ app:
   jwt:
     secret: ${VEPORTAL_JWT_SECRET:veportal-local-development-secret-key-change-me-0123456789abcdef}
     expiration-minutes: ${VEPORTAL_JWT_EXPIRATION_MINUTES:720}
+    cookie-name: ${VEPORTAL_JWT_COOKIE_NAME:ve_access}
+    cookie-secure: ${VEPORTAL_JWT_COOKIE_SECURE:false}
   mail:
     host: ${VEPORTAL_MAIL_HOST:smtp.gmail.com}
     port: ${VEPORTAL_MAIL_PORT:587}
@@ -45,7 +47,10 @@ app:
     password: ${VEPORTAL_MAIL_PASSWORD:}
     from: ${VEPORTAL_MAIL_FROM:admin@iiit.ac.in}
     portal-url: ${VEPORTAL_PORTAL_URL:http://localhost:5173}
-  seed-demo-data: ${VEPORTAL_SEED_DEMO:true}
+  storage:
+    materials-dir: ${VEPORTAL_MATERIALS_DIR:./storage/materials}
+    max-file-bytes: ${VEPORTAL_MAX_MATERIAL_BYTES:10485760}
+  seed-demo-data: ${VEPORTAL_SEED_DEMO:false}
 
 logging:
   level:

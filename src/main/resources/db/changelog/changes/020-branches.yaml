@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-branches
+      author: veportal
+      changes:
+        - createTable:
+            tableName: branches
+            columns:
+              - column: { name: id, type: bigint, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: code, type: varchar(20), constraints: { nullable: false, unique: true, uniqueConstraintName: uq_branches_code } }
+              - column: { name: name, type: varchar(120), constraints: { nullable: false } }
+              - column: { name: active, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: created_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: { nullable: false } }
+              - column: { name: created_by, type: varchar(120) }
+              - column: { name: updated_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: { nullable: false } }
+              - column: { name: updated_by, type: varchar(120) }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: CSE } }, { column: { name: name, value: Computer Science and Engineering } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: CSD } }, { column: { name: name, value: Computer Science and Design } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: CND } }, { column: { name: name, value: Computer Networks and Data } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: CHD } }, { column: { name: name, value: Chemical Engineering and Design } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: CLD } }, { column: { name: name, value: Computational Linguistics and Design } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: ECE } }, { column: { name: name, value: Electronics and Communication Engineering } }] }
+        - insert: { tableName: branches, columns: [{ column: { name: code, value: ECD } }, { column: { name: name, value: Electronics and Computer Design } }] }
+        - addColumn:
+            tableName: students
+            columns:
+              - column: { name: branch_code, type: varchar(20) }
+        - createIndex:
+            tableName: students
+            indexName: idx_students_branch_code
+            columns: [{ column: { name: branch_code } }]
+        - addForeignKeyConstraint:
+            baseTableName: students
+            baseColumnNames: branch_code
+            referencedTableName: branches
+            referencedColumnNames: code
+            constraintName: fk_students_branch_code
+            onDelete: SET NULL

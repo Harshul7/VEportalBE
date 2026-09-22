@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 018-material-storage
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: course_materials
+            columns:
+              - column: { name: storage_key, type: varchar(255) }
+              - column: { name: content_type, type: varchar(120) }
+        - createIndex:
+            tableName: course_materials
+            indexName: idx_materials_storage_key
+            columns:
+              - column: { name: storage_key }

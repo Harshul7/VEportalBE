@@ -13,10 +13,15 @@ import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ParticipationRecordRepository;
 import org.example.veportal.repository.StudentRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import java.nio.charset.StandardCharsets;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/reports")
+@PreAuthorize("@resourceAuthorization.canAccessStudent(#id, #courseId)")
 public class ReportsController {
     private final StudentRepository studentRepository;
     private final AttendanceRecordRepository attendanceRepository;
@@ -72,6 +77,43 @@ public class ReportsController {
                 participationSummary.entrySet().stream()
                         .map(e -> new ParticipationSummary(e.getKey(), e.getValue())).toList());
         return ResponseEntity.ok(ApiResponse.success(report, "Performance retrieved"));
+    }
+
+    @GetMapping(value = "/students/{id}/performance/export", produces = "text/csv")
+    public ResponseEntity<byte[]> exportStudentPerformance(@PathVariable Long id,
+                                                            @RequestParam(name = "courseId", required = false) Long courseId) {
+        Student student = studentRepository.findById(id).orElseThrow(() ->
+                org.example.veportal.exception.NotFoundException.resource("Student", id));
+        List<AttendanceRecord> records = attendanceRepository.findStudentHistory(id, courseId);
+        long present = records.stream().filter(r -> r.getStatus().name().equals("PRESENT")).count();
+        StringBuilder csv = new StringBuilder("Roll Number,Name,Branch,Section,Date,Chapter,Status,Participation,Participation Notes\n");
+        Map<Long, ParticipationRecord> participationBySession = new LinkedHashMap<>();
+        participationRepository.findStudentHistory(id, courseId).forEach(p -> participationBySession.put(p.getSession().getId(), p));
+        for (AttendanceRecord record : records) {
+            var chapter = record.getSession().getChapter();
+            ParticipationRecord participation = participationBySession.get(record.getSession().getId());
+            csv.append(csv(student.getStudentCode())).append(',')
+                    .append(csv(student.getFullName())).append(',')
+                    .append(csv(student.getProgramme())).append(',')
+                    .append(csv(student.getBatch())).append(',')
+                    .append(record.getSession().getSessionDate()).append(',')
+                    .append(csv(chapter == null ? "" : chapter.getChapterNumber() + " - " + chapter.getTitle())).append(',')
+                    .append(record.getStatus().name()).append(',')
+                    .append(csv(participation == null ? "" : participation.getLevel().name())).append(',')
+                    .append(csv(participation == null ? "" : participation.getNotes())).append('\n');
+        }
+        csv.append("\nSummary,,,,,,,,\nPresent,").append(present)
+                .append(",Total,").append(records.size())
+                .append(",Attendance %," ).append(records.isEmpty() ? "0" : String.format(java.util.Locale.ROOT, "%.2f", present * 100.0 / records.size())).append('\n');
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"student-performance-" + student.getStudentCode() + ".csv\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(csv.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String csv(String value) {
+        if (value == null) return "";
+        return "\"" + value.replace("\"", "\"\"") + "\"";
     }
 
     private record ChapterSummary(long chapterId, int chapterNumber, String chapterTitle,

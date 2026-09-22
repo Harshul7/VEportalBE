@@ -85,6 +85,11 @@ public class AttendanceService {
         for (var entry : request.entries()) {
             Student student = studentRepository.findByStudentCodeIgnoreCase(entry.studentId().trim())
                     .orElseThrow(() -> NotFoundException.resource("Student", entry.studentId()));
+            List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
+                    .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
+            if (!enrolledIds.isEmpty() && !enrolledIds.contains(student.getId())) {
+                throw NotFoundException.resource("Enrolled student", entry.studentId());
+            }
             AttendanceStatus status = Labels.toAttendanceStatus(entry.status());
             AttendanceRecord record = existingByStudent.get(student.getId());
             if (record == null) {

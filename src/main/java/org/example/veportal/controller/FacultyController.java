@@ -1,10 +1,13 @@
 package org.example.veportal.controller;
 
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import org.example.veportal.dto.ApiResponse;
 import org.example.veportal.dto.PagedResult;
 import org.example.veportal.entity.AcademicYear;
+import org.example.veportal.entity.Branch;
 import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
@@ -17,6 +20,7 @@ import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
+import org.example.veportal.repository.BranchRepository;
 import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.repository.ClassSessionRepository;
@@ -52,6 +56,7 @@ public class FacultyController {
     private final ChapterRepository chapterRepository;
     private final CourseStudentRepository courseStudentRepository;
     private final AcademicYearRepository academicYearRepository;
+    private final BranchRepository branchRepository;
     private final TopicRepository topicRepository;
 
     public FacultyController(AuthenticatedUserProvider authenticatedUserProvider,
@@ -65,7 +70,8 @@ public class FacultyController {
                              ChapterRepository chapterRepository,
                              CourseStudentRepository courseStudentRepository,
                              AcademicYearRepository academicYearRepository,
-                             TopicRepository topicRepository) {
+                             TopicRepository topicRepository,
+                             BranchRepository branchRepository) {
         this.authenticatedUserProvider = authenticatedUserProvider;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -78,6 +84,7 @@ public class FacultyController {
         this.courseStudentRepository = courseStudentRepository;
         this.academicYearRepository = academicYearRepository;
         this.topicRepository = topicRepository;
+        this.branchRepository = branchRepository;
     }
 
     private List<Course> coursesForCurrentUser(UserAccount currentUser) {
@@ -145,6 +152,14 @@ public class FacultyController {
         return ResponseEntity.ok(ApiResponse.success(courses, "Courses retrieved"));
     }
 
+    @GetMapping("/branches")
+    public ResponseEntity<ApiResponse<List<BranchItem>>> branches() {
+        List<BranchItem> branches = branchRepository.findByActiveTrueOrderByCodeAsc().stream()
+                .map(b -> new BranchItem(b.getId(), b.getCode(), b.getName(), b.isActive(),
+                        b.getCreatedAt() == null ? "" : b.getCreatedAt().toString())).toList();
+        return ResponseEntity.ok(ApiResponse.success(branches, "Branches retrieved"));
+    }
+
     @GetMapping("/courses/{courseId}/chapters")
     public ResponseEntity<ApiResponse<List<ChapterItem>>> courseChapters(@PathVariable Long courseId) {
         UserAccount currentUser = authenticatedUserProvider.currentUser();
@@ -153,7 +168,7 @@ public class FacultyController {
         }
 
         List<ChapterItem> chapters = chapterRepository.findByCourseIdOrderByDisplayOrderAscChapterNumberAsc(courseId)
-                .stream()
+                .stream().filter(ch -> !"ARCHIVED".equalsIgnoreCase(ch.getStatus()))
                 .map(this::toChapterItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(chapters, "Chapters retrieved"));
@@ -161,6 +176,10 @@ public class FacultyController {
 
     @GetMapping("/chapters/{chapterId}/topics")
     public ResponseEntity<ApiResponse<List<TopicItem>>> topics(@PathVariable Long chapterId) {
+        Chapter chapter = chapterRepository.findById(chapterId).orElse(null);
+        if (chapter == null || !canAccessCourse(authenticatedUserProvider.currentUser(), chapter.getCourse().getId())) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Chapter not accessible"));
+        }
         return ResponseEntity.ok(ApiResponse.success(
                 topicRepository.findByChapterIdAndStatusOrderByDisplayOrderAscIdAsc(chapterId, "ACTIVE")
                         .stream().map(t -> new TopicItem(t.getId(), t.getTitle(),
@@ -185,12 +204,76 @@ public class FacultyController {
         return ResponseEntity.ok(ApiResponse.success(items, "Course students retrieved"));
     }
 
+    @GetMapping("/students")
+    public ResponseEntity<ApiResponse<List<FacultyStudentItem>>> students(
+            @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "branchId", required = false) Long branchId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size) {
+        UserAccount user = authenticatedUserProvider.currentUser();
+        List<Long> ids = assignedStudentIds(user);
+        String term = search == null ? "" : search.trim().toLowerCase();
+        Branch branch = branchId == null ? null : branchRepository.findById(branchId).orElse(null);
+        List<Student> filtered = studentRepository.findAllById(ids).stream()
+                .filter(s -> term.isBlank() || s.getFullName().toLowerCase().contains(term)
+                        || s.getStudentCode().toLowerCase().contains(term))
+                .filter(s -> branch == null || branch.getCode().equalsIgnoreCase(s.getBranchCode())
+                        || branch.getName().equalsIgnoreCase(s.getProgramme()))
+                .sorted(java.util.Comparator.comparing(Student::getFullName))
+                .toList();
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        int safePage = Math.max(page, 0);
+        int from = Math.min(safePage * safeSize, filtered.size());
+        int to = Math.min(from + safeSize, filtered.size());
+        List<Student> current = filtered.subList(from, to);
+        Map<Long, AttendanceRecordRepository.StudentAttendanceAggregation> aggregates = new HashMap<>();
+        if (!current.isEmpty()) {
+            attendanceRepository.aggregateByStudents(current.stream().map(Student::getId).toList())
+                    .forEach(a -> aggregates.put(a.getStudentId(), a));
+        }
+        List<FacultyStudentItem> items = current.stream().map(s -> toFacultyStudentItem(s, aggregates.get(s.getId()))).toList();
+        int totalPages = (int) Math.ceil(filtered.size() / (double) safeSize);
+        return ResponseEntity.ok(ApiResponse.success(items, "Students retrieved",
+                new org.example.veportal.dto.PageMeta(safePage, safeSize, filtered.size(), totalPages)));
+    }
+
+    @GetMapping("/students/{studentId}")
+    public ResponseEntity<ApiResponse<FacultyStudentItem>> student(@PathVariable Long studentId) {
+        if (!assignedStudentIds(authenticatedUserProvider.currentUser()).contains(studentId)) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Student not accessible"));
+        }
+        Student student = studentRepository.findById(studentId).orElse(null);
+        if (student == null) return ResponseEntity.status(404).body(ApiResponse.error("Student not found"));
+        AttendanceRecordRepository.StudentAttendanceAggregation aggregate = attendanceRepository
+                .aggregateByStudents(List.of(studentId)).stream().findFirst().orElse(null);
+        return ResponseEntity.ok(ApiResponse.success(toFacultyStudentItem(student, aggregate), "Student retrieved"));
+    }
+
+    private List<Long> assignedStudentIds(UserAccount user) {
+        List<Long> courseIds = courseFacultyRepository.findByFacultyId(user.getId()).stream()
+                .map(CourseFaculty::getCourseId).toList();
+        return courseIds.stream().flatMap(courseId -> courseStudentRepository.findByCourseId(courseId).stream()
+                        .map(org.example.veportal.entity.CourseStudent::getStudentId))
+                .distinct().toList();
+    }
+
+    private FacultyStudentItem toFacultyStudentItem(Student s,
+            AttendanceRecordRepository.StudentAttendanceAggregation aggregate) {
+        long total = aggregate == null ? 0 : aggregate.getTotal();
+        long present = aggregate == null ? 0 : aggregate.getPresent();
+        double percentage = total == 0 ? 0 : present * 100.0 / total;
+        return new FacultyStudentItem(s.getId(), s.getStudentCode(), s.getFullName(), s.getEmail(),
+                s.getBranchCode(), s.getProgramme(), s.getBranchCode(), null, s.getBatch(), 1,
+                s.getStatus().name(), s.getCreatedAt() == null ? "" : s.getCreatedAt().toString(),
+                percentage, total, present);
+    }
+
     @GetMapping("/class-sessions")
     public ResponseEntity<ApiResponse<List<ClassSessionListItem>>> classSessions(
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         PagedResult<org.example.veportal.dto.response.SessionListItemResponse> result =
-                sessionService.list(null, null, page, size);
+                sessionService.list(null, null, page, size, authenticatedUserProvider.currentUser());
 
         List<ClassSessionListItem> items = result.content().stream()
                 .map(s -> new ClassSessionListItem(
@@ -227,6 +310,9 @@ public class FacultyController {
                     .orElseThrow(() -> NotFoundException.resource("Course", courseId))
                 : courseRepository.findAll().stream().findFirst()
                     .orElseThrow(() -> NotFoundException.resource("Course", "none"));
+        if (!canAccessCourse(currentUser, course.getId())) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Course not accessible"));
+        }
 
         ClassSession session = new ClassSession();
         session.setCourse(course);
@@ -234,6 +320,7 @@ public class FacultyController {
         if (body.chapterId() != null) {
             chapterRepository.findById(body.chapterId())
                     .filter(ch -> ch.getCourse().getId().equals(course.getId()))
+                    .filter(ch -> !"ARCHIVED".equalsIgnoreCase(ch.getStatus()))
                     .ifPresent(session::setChapter);
         }
         if (body.topicId() != null) {
@@ -301,6 +388,13 @@ public class FacultyController {
     public record CourseStudentItem(
             long id, String name, String rollNumber, String programme
     ) {}
+
+    public record FacultyStudentItem(long id, String rollNumber, String name, String email,
+            String branchId, String branchName, String branchCode, Long academicYearId,
+            String academicYearName, int semester, String status, String createdAt,
+            double attendancePercentage, long totalClasses, long presentClasses) {}
+
+    public record BranchItem(long id, String code, String name, boolean active, String createdAt) {}
 
     public record ClassSessionListItem(
             long id,

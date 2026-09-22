@@ -22,6 +22,9 @@ public class Student extends BaseEntity {
     @Column(name = "programme", nullable = false, length = 80)
     private String programme;
 
+    @Column(name = "branch_code", length = 20)
+    private String branchCode;
+
     @Column(name = "batch", nullable = false, length = 20)
     private String batch;
 
@@ -55,6 +58,9 @@ public class Student extends BaseEntity {
     public void setProgramme(String programme) {
         this.programme = programme;
     }
+
+    public String getBranchCode() { return branchCode; }
+    public void setBranchCode(String branchCode) { this.branchCode = branchCode; }
 
     public String getBatch() {
         return batch;
