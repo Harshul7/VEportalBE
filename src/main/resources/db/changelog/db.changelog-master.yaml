@@ -41,3 +41,9 @@ databaseChangeLog:
       file: db/changelog/changes/020-branches.yaml
   - include:
       file: db/changelog/changes/021-backfill-student-branches.yaml
+  - include:
+      file: db/changelog/changes/022-session-planning-fields.yaml
+  - include:
+      file: db/changelog/changes/023-course-type-semester.yaml
+  - include:
+      file: db/changelog/changes/024-student-professor-mapping.yaml

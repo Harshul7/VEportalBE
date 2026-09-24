@@ -1,0 +1,33 @@
+databaseChangeLog:
+  - changeSet:
+      id: 022-session-planning-fields
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: class_sessions
+            columns:
+              - column:
+                  name: title
+                  type: varchar(255)
+              - column:
+                  name: mode
+                  type: varchar(30)
+              - column:
+                  name: session_type
+                  type: varchar(40)
+              - column:
+                  name: description
+                  type: varchar(2000)
+      rollback:
+        - dropColumn:
+            tableName: class_sessions
+            columnName: title
+        - dropColumn:
+            tableName: class_sessions
+            columnName: mode
+        - dropColumn:
+            tableName: class_sessions
+            columnName: session_type
+        - dropColumn:
+            tableName: class_sessions
+            columnName: description

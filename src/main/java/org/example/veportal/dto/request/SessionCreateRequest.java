@@ -5,6 +5,11 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record SessionCreateRequest(
+        Long courseId,
+
+        @Size(max = 255, message = "Title must be at most 255 characters")
+        String title,
+
         @NotBlank(message = "Topic is required")
         @Size(max = 255, message = "Topic must be at most 255 characters")
         String topic,
@@ -24,8 +29,17 @@ public record SessionCreateRequest(
         @Size(max = 60, message = "Room must be at most 60 characters")
         String room,
 
+        @Size(max = 30, message = "Mode must be at most 30 characters")
+        String mode,
+
+        @Size(max = 40, message = "Session type must be at most 40 characters")
+        String sessionType,
+
+        @Size(max = 2000, message = "Description must be at most 2000 characters")
+        String description,
+
         @NotBlank(message = "Status is required")
-        @Pattern(regexp = "Upcoming|Completed|Draft", message = "Status must be Upcoming, Completed or Draft")
+        @Pattern(regexp = "Upcoming|Scheduled|Ongoing|Completed|Closed|Draft", message = "Invalid session status")
         String status
 ) {
 }

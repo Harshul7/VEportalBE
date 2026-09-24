@@ -35,6 +35,18 @@ public class ClassSession extends BaseEntity {
     @Column(name = "topic", nullable = false)
     private String topic;
 
+    @Column(name = "title", length = 255)
+    private String title;
+
+    @Column(name = "mode", length = 30)
+    private String mode;
+
+    @Column(name = "session_type", length = 40)
+    private String sessionType;
+
+    @Column(name = "description", length = 2000)
+    private String description;
+
     @Column(name = "session_date", nullable = false)
     private LocalDate sessionDate;
 
@@ -90,6 +102,15 @@ public class ClassSession extends BaseEntity {
     public String getTopic() {
         return topic;
     }
+
+    public String getTitle() { return title; }
+    public void setTitle(String title) { this.title = title; }
+    public String getMode() { return mode; }
+    public void setMode(String mode) { this.mode = mode; }
+    public String getSessionType() { return sessionType; }
+    public void setSessionType(String sessionType) { this.sessionType = sessionType; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public void setTopic(String topic) {
         this.topic = topic;

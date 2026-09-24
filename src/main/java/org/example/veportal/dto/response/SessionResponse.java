@@ -9,6 +9,12 @@ public record SessionResponse(
         String endTime,
         String room,
         String facultyName,
-        String status
+        String status,
+        Long courseId,
+        String courseCode,
+        String title,
+        String mode,
+        String sessionType,
+        String description
 ) {
 }

@@ -16,16 +16,20 @@ public final class Labels {
 
     public static String of(SessionStatus status) {
         return switch (status) {
-            case UPCOMING -> "Upcoming";
+            case UPCOMING, SCHEDULED -> "Scheduled";
+            case ONGOING -> "Ongoing";
             case COMPLETED -> "Completed";
+            case CLOSED -> "Closed";
             case DRAFT -> "Draft";
         };
     }
 
     public static SessionStatus toSessionStatus(String label) {
         return switch (label) {
-            case "Upcoming" -> SessionStatus.UPCOMING;
+            case "Upcoming", "Scheduled" -> SessionStatus.SCHEDULED;
+            case "Ongoing" -> SessionStatus.ONGOING;
             case "Completed" -> SessionStatus.COMPLETED;
+            case "Closed" -> SessionStatus.CLOSED;
             case "Draft" -> SessionStatus.DRAFT;
             default -> throw new BusinessException("Unknown session status: " + label);
         };

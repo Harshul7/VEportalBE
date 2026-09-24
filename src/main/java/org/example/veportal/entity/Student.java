@@ -6,6 +6,9 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 @Table(name = "students", uniqueConstraints = {
@@ -34,6 +37,10 @@ public class Student extends BaseEntity {
 
     @Column(name = "email", nullable = false, length = 190)
     private String email;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "faculty_id")
+    private UserAccount faculty;
 
     public String getStudentCode() {
         return studentCode;
@@ -85,4 +92,7 @@ public class Student extends BaseEntity {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    public UserAccount getFaculty() { return faculty; }
+    public void setFaculty(UserAccount faculty) { this.faculty = faculty; }
 }

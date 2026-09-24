@@ -33,6 +33,8 @@ import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
+import org.example.veportal.repository.TeachingLogRepository;
+import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.service.MailService;
 import org.example.veportal.service.AuthService;
 import org.example.veportal.util.Percent;
@@ -53,6 +55,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import java.io.InputStream;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -73,6 +82,7 @@ public class AdminController {
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final AuthService authService;
+    private final TeachingLogRepository teachingLogRepository;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
@@ -87,7 +97,8 @@ public class AdminController {
                            TopicRepository topicRepository,
                            PasswordEncoder passwordEncoder,
                            MailService mailService,
-                           AuthService authService) {
+                           AuthService authService,
+                           TeachingLogRepository teachingLogRepository) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -102,6 +113,7 @@ public class AdminController {
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
         this.authService = authService;
+        this.teachingLogRepository = teachingLogRepository;
     }
 
     @GetMapping("/dashboard")
@@ -110,15 +122,23 @@ public class AdminController {
         long totalFaculty = userAccountRepository.findAll().stream()
                 .filter(u -> u.getRole() == Role.FACULTY)
                 .count();
-        long activeCourses = courseRepository.count();
-        long classesConducted = sessionRepository.count();
+        long activeCourses = courseRepository.findAll().stream()
+                .filter(c -> "ACTIVE".equalsIgnoreCase(c.getStatus())).count();
+        long classesConducted = sessionRepository.countByStatus(SessionStatus.COMPLETED);
+        long upcomingSessions = sessionRepository.countByStatus(SessionStatus.SCHEDULED)
+                + sessionRepository.countByStatus(SessionStatus.UPCOMING);
+        long pendingReports = Math.max(0, classesConducted - teachingLogRepository.count());
+        long totalAttendance = attendanceRepository.countForCompletedSessions();
+        long presentAttendance = attendanceRepository.countPresentForCompletedSessions();
+        double attendancePercent = totalAttendance == 0 ? 0.0 : presentAttendance * 100.0 / totalAttendance;
         AcademicYear current = academicYearRepository.findByCurrentTrue().orElse(null);
         long totalChapters = chapterRepository.count();
         String currentYear = current != null ? current.getName() : "2025-2026";
 
         DashboardStats stats = new DashboardStats(
                 totalStudents, totalFaculty, totalChapters, classesConducted,
-                0.0, currentYear, activeCourses, totalChapters
+                attendancePercent, currentYear, activeCourses, totalChapters,
+                upcomingSessions, classesConducted, pendingReports
         );
         return ResponseEntity.ok(ApiResponse.success(stats, "Dashboard stats retrieved"));
     }
@@ -163,8 +183,10 @@ public class AdminController {
 
     @PostMapping("/students")
     public ResponseEntity<ApiResponse<StudentListItem>> createStudent(@RequestBody CreateStudentRequest request) {
-        String code = request.rollNumber() == null || request.rollNumber().isBlank()
-                ? generatedStudentCode() : request.rollNumber().trim();
+        if (request.rollNumber() == null || request.rollNumber().isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("Student ID is required"));
+        }
+        String code = request.rollNumber().trim();
         if (studentRepository.existsByStudentCodeIgnoreCase(code)) {
             return ResponseEntity.ok(ApiResponse.error("A student with roll number " + code + " already exists"));
         }
@@ -177,8 +199,78 @@ public class AdminController {
         s.setBranchCode(branchCodeForId(request.branchId()));
         s.setStatus(AccountStatus.ACTIVE);
         s.setBatch(academicYearBatchName(request.academicYearId()));
+        if (request.facultyId() != null) {
+            UserAccount faculty = userAccountRepository.findById(request.facultyId()).orElse(null);
+            if (faculty == null || faculty.getRole() != Role.FACULTY) {
+                return ResponseEntity.ok(ApiResponse.error("Selected professor was not found"));
+            }
+            s.setFaculty(faculty);
+        }
         Student saved = studentRepository.save(s);
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, null), "Student created"));
+    }
+
+    @PostMapping(value = "/students/import", consumes = "multipart/form-data")
+    public ResponseEntity<ApiResponse<StudentImportResult>> importStudents(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam Long facultyId,
+            @RequestParam(required = false) Long academicYearId) {
+        if (file.isEmpty()) return ResponseEntity.ok(ApiResponse.error("Excel file is required"));
+        UserAccount faculty = userAccountRepository.findById(facultyId).orElse(null);
+        if (faculty == null || faculty.getRole() != Role.FACULTY) {
+            return ResponseEntity.ok(ApiResponse.error("Selected professor was not found"));
+        }
+        int imported = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
+        try (InputStream input = file.getInputStream(); var workbook = WorkbookFactory.create(input)) {
+            var sheet = workbook.getSheetAt(0);
+            if (sheet.getLastRowNum() < 1) return ResponseEntity.ok(ApiResponse.error("Excel file has no student rows"));
+            DataFormatter formatter = new DataFormatter();
+            Map<String, Integer> headers = new HashMap<>();
+            Row header = sheet.getRow(0);
+            for (Cell cell : header) headers.put(formatter.formatCellValue(cell).trim().toLowerCase(Locale.ROOT), cell.getColumnIndex());
+            int idColumn = firstColumn(headers, "student id", "student_id", "student code", "student_code", "roll number", "roll_number");
+            int nameColumn = firstColumn(headers, "name", "student name", "student_name");
+            if (idColumn < 0 || nameColumn < 0) return ResponseEntity.ok(ApiResponse.error("Excel must contain Student ID and Name columns"));
+            for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (row == null) continue;
+                String code = formatter.formatCellValue(row.getCell(idColumn)).trim();
+                String name = formatter.formatCellValue(row.getCell(nameColumn)).trim();
+                if (code.isBlank() && name.isBlank()) continue;
+                if (code.isBlank() || name.isBlank()) { skipped++; errors.add("Row " + (rowIndex + 1) + ": Student ID and Name are required"); continue; }
+                if (studentRepository.existsByStudentCodeIgnoreCase(code)) { skipped++; errors.add("Row " + (rowIndex + 1) + ": duplicate Student ID " + code); continue; }
+                Student student = new Student();
+                student.setStudentCode(code);
+                student.setFullName(name);
+                int emailColumn = firstColumn(headers, "email", "student email");
+                String email = emailColumn < 0 ? deriveEmail(name) : formatter.formatCellValue(row.getCell(emailColumn)).trim();
+                student.setEmail(email.isBlank() ? deriveEmail(name) : email);
+                int programmeColumn = firstColumn(headers, "programme", "program", "branch");
+                student.setProgramme(programmeColumn < 0 ? "General" : value(formatter, row, programmeColumn, "General"));
+                student.setBranchCode(programmeColumn < 0 ? null : value(formatter, row, programmeColumn, null));
+                student.setBatch(academicYearBatchName(academicYearId));
+                student.setStatus(AccountStatus.ACTIVE);
+                student.setFaculty(faculty);
+                studentRepository.save(student);
+                imported++;
+            }
+        } catch (Exception e) {
+            return ResponseEntity.ok(ApiResponse.error("Unable to read Excel file: " + e.getMessage()));
+        }
+        return ResponseEntity.ok(ApiResponse.success(new StudentImportResult(imported, skipped, errors),
+                "Student import completed"));
+    }
+
+    private int firstColumn(Map<String, Integer> headers, String... names) {
+        for (String name : names) if (headers.containsKey(name)) return headers.get(name);
+        return -1;
+    }
+
+    private String value(DataFormatter formatter, Row row, int column, String fallback) {
+        String value = formatter.formatCellValue(row.getCell(column)).trim();
+        return value.isBlank() ? fallback : value;
     }
 
     @PutMapping("/students/{id}")
@@ -189,6 +281,10 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.error("Student not found"));
         }
         if (request.rollNumber() != null && !request.rollNumber().isBlank()) {
+            if (studentRepository.findByStudentCodeIgnoreCase(request.rollNumber().trim())
+                    .filter(existing -> !existing.getId().equals(id)).isPresent()) {
+                return ResponseEntity.ok(ApiResponse.error("A student with Student ID " + request.rollNumber().trim() + " already exists"));
+            }
             s.setStudentCode(request.rollNumber().trim());
         }
         if (request.name() != null && !request.name().isBlank()) {
@@ -256,16 +352,23 @@ public class AdminController {
     @PostMapping("/faculty")
     public ResponseEntity<ApiResponse<FacultyListItem>> createFaculty(@RequestBody CreateFacultyRequest request) {
         String email = request.email() == null ? null : request.email().trim();
+        if (request.employeeId() == null || request.employeeId().isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("Employee ID is required"));
+        }
         if (email == null || email.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("Email is required"));
         }
+        String employeeId = request.employeeId() == null ? null : request.employeeId().trim();
         if (userAccountRepository.existsByEmailIgnoreCase(email)) {
             return ResponseEntity.ok(ApiResponse.error("A user with email " + email + " already exists"));
+        }
+        if (employeeId != null && !employeeId.isBlank() && userAccountRepository.existsByStaffCodeIgnoreCase(employeeId)) {
+            return ResponseEntity.ok(ApiResponse.error("A professor with Employee ID " + employeeId + " already exists"));
         }
         UserAccount user = new UserAccount();
         user.setEmail(email);
         user.setFullName(request.name() == null ? "" : request.name().trim());
-        user.setStaffCode(request.employeeId() == null || request.employeeId().isBlank()
+        user.setStaffCode(employeeId == null || employeeId.isBlank()
                 ? generatedStaffCode() : request.employeeId().trim());
         user.setDepartment(request.department() == null ? "" : request.department().trim());
         user.setRole(Role.FACULTY);
@@ -359,6 +462,10 @@ public class AdminController {
 
     @PostMapping("/academic-years")
     public ResponseEntity<ApiResponse<AcademicYearItem>> createAcademicYear(@RequestBody CreateAcademicYearRequest request) {
+        if (request.startYear() == null || request.endYear() == null
+                || request.startYear() <= 0 || request.endYear() <= request.startYear()) {
+            return ResponseEntity.ok(ApiResponse.error("Valid start and end years are required"));
+        }
         String name = request.name() == null || request.name().isBlank()
                 ? (request.startYear() + "-" + request.endYear()) : request.name().trim();
         if (academicYearRepository.findByName(name).isPresent()) {
@@ -404,6 +511,18 @@ public class AdminController {
 
     @PostMapping("/courses")
     public ResponseEntity<ApiResponse<CourseListItem>> createCourse(@RequestBody CreateCourseRequest request) {
+        if (request.academicYearId() == null) {
+            return ResponseEntity.ok(ApiResponse.error("Select an academic year before creating a course"));
+        }
+        AcademicYear academicYear = academicYearRepository.findById(request.academicYearId()).orElse(null);
+        if (academicYear == null) {
+            return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
+        }
+        if (request.name() == null || request.name().isBlank()
+                || request.code() == null || request.code().isBlank()
+                || request.semester() == null || request.semester() < 1) {
+            return ResponseEntity.ok(ApiResponse.error("Course name, code and semester are required"));
+        }
         String code = request.code() == null || request.code().isBlank()
                 ? "VE-" + System.currentTimeMillis() : request.code().trim();
         if (courseRepository.findByCode(code).isPresent()) {
@@ -411,12 +530,12 @@ public class AdminController {
         }
         Course course = new Course();
         course.setCode(code);
-        course.setName(request.name() == null ? "Untitled Course" : request.name().trim());
-        course.setTerm(request.courseType() == null ? "VE1" : request.courseType().trim());
+        course.setName(request.name().trim());
+        course.setCourseType(request.courseType() == null ? "VE1" : request.courseType().trim());
+        course.setTerm(course.getCourseType());
+        course.setSemester(request.semester());
         course.setStatus("ACTIVE");
-        if (request.academicYearId() != null) {
-            academicYearRepository.findById(request.academicYearId()).ifPresent(course::setAcademicYear);
-        }
+        course.setAcademicYear(academicYear);
         Course saved = courseRepository.save(course);
         return ResponseEntity.ok(ApiResponse.success(toCourseItem(saved), "Course created"));
     }
@@ -607,8 +726,8 @@ public class AdminController {
                 c.getId(),
                 c.getName(),
                 c.getCode(),
-                c.getTerm() != null ? c.getTerm() : "VE1",
-                1,
+                c.getCourseType() != null ? c.getCourseType() : (c.getTerm() != null ? c.getTerm() : "VE1"),
+                c.getSemester() == null ? 1 : c.getSemester(),
                 year != null ? year.getId() : 0,
                 year != null ? year.getName() : "",
                 c.getStatus() != null ? c.getStatus() : "ACTIVE",
@@ -734,7 +853,8 @@ public class AdminController {
     public record DashboardStats(
             long totalStudents, long totalFaculty, long totalChapters, long classesConducted,
             double overallAttendancePercentage, String currentAcademicYear,
-            long activeCourses, long activeChapters
+            long activeCourses, long activeChapters, long upcomingSessions,
+            long completedSessions, long pendingSessionReports
     ) {}
 
     public record StudentListItem(
@@ -781,7 +901,9 @@ public class AdminController {
     ) {}
 
     public record CreateStudentRequest(String rollNumber, String name, String email,
-                                       Long branchId, Long academicYearId, Integer semester) {}
+                                       Long branchId, Long academicYearId, Integer semester, Long facultyId) {}
+
+    public record StudentImportResult(int imported, int skipped, List<String> errors) {}
 
     public record CreateFacultyRequest(String name, String email, String employeeId, String department) {}
 

@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 023-course-type-semester
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: courses
+            columns:
+              - column:
+                  name: course_type
+                  type: varchar(30)
+              - column:
+                  name: semester
+                  type: int
+        - update:
+            tableName: courses
+            columns:
+              - column:
+                  name: course_type
+                  valueComputed: term
+              - column:
+                  name: semester
+                  valueNumeric: 1
+      rollback:
+        - dropColumn:
+            tableName: courses
+            columnName: course_type
+        - dropColumn:
+            tableName: courses
+            columnName: semester

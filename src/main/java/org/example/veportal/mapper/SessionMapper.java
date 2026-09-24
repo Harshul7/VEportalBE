@@ -28,7 +28,13 @@ public class SessionMapper {
                 session.getEndTime(),
                 session.getRoom(),
                 facultyName(session),
-                Labels.of(session.getStatus())
+                Labels.of(session.getStatus()),
+                session.getCourse().getId(),
+                session.getCourse().getCode(),
+                session.getTitle(),
+                session.getMode(),
+                session.getSessionType(),
+                session.getDescription()
         );
     }
 

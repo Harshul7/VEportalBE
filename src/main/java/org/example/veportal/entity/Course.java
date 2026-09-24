@@ -23,6 +23,12 @@ public class Course extends BaseEntity {
     @Column(name = "term", length = 50)
     private String term;
 
+    @Column(name = "course_type", length = 30)
+    private String courseType;
+
+    @Column(name = "semester")
+    private Integer semester;
+
     @Column(name = "status", length = 50)
     private String status;
 
@@ -64,6 +70,11 @@ public class Course extends BaseEntity {
     public String getStatus() {
         return status;
     }
+
+    public String getCourseType() { return courseType; }
+    public void setCourseType(String courseType) { this.courseType = courseType; }
+    public Integer getSemester() { return semester; }
+    public void setSemester(Integer semester) { this.semester = semester; }
 
     public void setStatus(String status) {
         this.status = status;

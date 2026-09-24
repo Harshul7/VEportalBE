@@ -27,4 +27,6 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Long
     boolean existsByCourseIdAndSessionNumber(Long courseId, Integer sessionNumber);
 
     long countByCourseIdAndStatus(Long courseId, SessionStatus status);
+
+    long countByStatus(SessionStatus status);
 }

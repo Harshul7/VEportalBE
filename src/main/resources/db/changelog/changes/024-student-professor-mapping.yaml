@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 024-student-professor-mapping
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: students
+            columns:
+              - column:
+                  name: faculty_id
+                  type: bigint
+        - addForeignKeyConstraint:
+            baseTableName: students
+            baseColumnNames: faculty_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_students_faculty
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: students
+            constraintName: fk_students_faculty
+        - dropColumn:
+            tableName: students
+            columnName: faculty_id

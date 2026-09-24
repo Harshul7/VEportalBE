@@ -18,6 +18,8 @@ import org.example.veportal.mapper.SessionMapper;
 import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
+import org.example.veportal.repository.CourseFacultyRepository;
+import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.TeachingLogRepository;
 import org.example.veportal.util.Labels;
 import org.example.veportal.util.Percent;
@@ -38,6 +40,8 @@ public class SessionService {
     private final CourseMaterialRepository materialRepository;
     private final TeachingLogRepository teachingLogRepository;
     private final CurrentCourseProvider currentCourseProvider;
+    private final CourseRepository courseRepository;
+    private final CourseFacultyRepository courseFacultyRepository;
     private final SessionMapper sessionMapper;
 
     public SessionService(ClassSessionRepository sessionRepository,
@@ -45,12 +49,16 @@ public class SessionService {
                           CourseMaterialRepository materialRepository,
                           TeachingLogRepository teachingLogRepository,
                           CurrentCourseProvider currentCourseProvider,
+                          CourseRepository courseRepository,
+                          CourseFacultyRepository courseFacultyRepository,
                           SessionMapper sessionMapper) {
         this.sessionRepository = sessionRepository;
         this.attendanceRepository = attendanceRepository;
         this.materialRepository = materialRepository;
         this.teachingLogRepository = teachingLogRepository;
         this.currentCourseProvider = currentCourseProvider;
+        this.courseRepository = courseRepository;
+        this.courseFacultyRepository = courseFacultyRepository;
         this.sessionMapper = sessionMapper;
     }
 
@@ -63,7 +71,10 @@ public class SessionService {
     public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size, UserAccount currentUser) {
         Specification<ClassSession> spec = (root, query, cb) -> cb.conjunction();
         if (currentUser != null && currentUser.getRole() != Role.ADMIN) {
-            spec = spec.and((root, query, cb) -> cb.equal(root.get("faculty").get("id"), currentUser.getId()));
+            List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
+                    .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
+            spec = spec.and((root, query, cb) -> courseIds.isEmpty()
+                    ? cb.disjunction() : root.get("course").get("id").in(courseIds));
         }
         if (search != null && !search.isBlank()) {
             String term = search.trim().toLowerCase();
@@ -115,11 +126,33 @@ public class SessionService {
 
     @Transactional
     public SessionResponse create(SessionCreateRequest request, UserAccount currentUser) {
-        Course course = currentCourseProvider.requireCurrentCourse();
+        Course course;
+        if (request.courseId() == null && currentUser.getRole() != Role.ADMIN) {
+            Long assignedCourseId = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
+                    .map(org.example.veportal.entity.CourseFaculty::getCourseId).findFirst()
+                    .orElseThrow(() -> new org.example.veportal.exception.BusinessException(
+                            "You are not assigned to any course"));
+            course = courseRepository.findById(assignedCourseId)
+                    .orElseThrow(() -> NotFoundException.resource("Course", assignedCourseId));
+        } else {
+            course = request.courseId() == null
+                    ? currentCourseProvider.requireCurrentCourse()
+                    : courseRepository.findById(request.courseId())
+                        .orElseThrow(() -> NotFoundException.resource("Course", request.courseId()));
+        }
+        if (currentUser.getRole() != Role.ADMIN
+                && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
+            throw new org.example.veportal.exception.BusinessException("You are not assigned to this course");
+        }
         ClassSession session = new ClassSession();
         session.setCourse(course);
         session.setSessionNumber(sessionRepository.findMaxSessionNumber(course.getId()) + 1);
         session.setTopic(request.topic().trim());
+        session.setTitle(request.title() == null || request.title().isBlank()
+                ? request.topic().trim() : request.title().trim());
+        session.setMode(request.mode());
+        session.setSessionType(request.sessionType());
+        session.setDescription(request.description());
         session.setSessionDate(java.time.LocalDate.parse(request.date()));
         session.setStartTime(request.startTime());
         session.setEndTime(request.endTime());
@@ -133,6 +166,18 @@ public class SessionService {
     public ClassSession requireSession(Long sessionId) {
         return sessionRepository.findById(sessionId)
                 .orElseThrow(() -> NotFoundException.resource("Session", sessionId));
+    }
+
+    @Transactional(readOnly = true)
+    public SessionResponse get(Long sessionId) {
+        return sessionMapper.toResponse(requireSession(sessionId));
+    }
+
+    @Transactional
+    public SessionResponse updateStatus(Long sessionId, String status) {
+        ClassSession session = requireSession(sessionId);
+        session.setStatus(Labels.toSessionStatus(status));
+        return sessionMapper.toResponse(sessionRepository.save(session));
     }
 
     private Map<Long, Double> attendancePercentages(Collection<Long> sessionIds) {
