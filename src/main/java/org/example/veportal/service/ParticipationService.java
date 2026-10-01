@@ -12,9 +12,11 @@ import org.example.veportal.entity.ParticipationRecord;
 import org.example.veportal.entity.Student;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
+import org.example.veportal.exception.BusinessException;
 import org.example.veportal.mapper.AcademicMapper;
 import org.example.veportal.repository.ParticipationRecordRepository;
 import org.example.veportal.repository.StudentRepository;
+import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.util.Labels;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -28,17 +30,20 @@ public class ParticipationService {
     private final SessionService sessionService;
     private final AcademicMapper academicMapper;
     private final ActivityService activityService;
+    private final CourseStudentRepository courseStudentRepository;
 
     public ParticipationService(ParticipationRecordRepository participationRepository,
                                 StudentRepository studentRepository,
                                 SessionService sessionService,
                                 AcademicMapper academicMapper,
-                                ActivityService activityService) {
+                                ActivityService activityService,
+                                CourseStudentRepository courseStudentRepository) {
         this.participationRepository = participationRepository;
         this.studentRepository = studentRepository;
         this.sessionService = sessionService;
         this.academicMapper = academicMapper;
         this.activityService = activityService;
+        this.courseStudentRepository = courseStudentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -51,9 +56,12 @@ public class ParticipationService {
         List<Student> students = studentRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("status"), org.example.veportal.entity.AccountStatus.ACTIVE),
                 Sort.by(Sort.Direction.ASC, "fullName"));
+        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId()).stream()
+                .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
 
         String term = search == null ? "" : search.trim().toLowerCase();
         return students.stream()
+                .filter(student -> enrolledIds.contains(student.getId()))
                 .filter(student -> term.isEmpty()
                         || student.getFullName().toLowerCase().contains(term)
                         || student.getStudentCode().toLowerCase().contains(term))
@@ -85,9 +93,14 @@ public class ParticipationService {
         for (ParticipationRecord record : participationRepository.findWithStudentBySessionId(session.getId())) {
             existingByStudent.put(record.getStudent().getId(), record);
         }
+        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId()).stream()
+                .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
         for (var entry : request.entries()) {
             Student student = studentRepository.findByStudentCodeIgnoreCase(entry.studentId().trim())
                     .orElseThrow(() -> NotFoundException.resource("Student", entry.studentId()));
+            if (!enrolledIds.contains(student.getId())) {
+                throw new BusinessException("Student is not mapped to this course");
+            }
             ParticipationLevel level = Labels.toParticipationLevel(entry.level());
             ParticipationRecord record = existingByStudent.get(student.getId());
             if (level == ParticipationLevel.NOT_RECORDED) {

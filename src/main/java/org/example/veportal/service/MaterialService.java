@@ -139,6 +139,11 @@ public class MaterialService {
             }
             session = sessionRepository.findById(parsedSessionId)
                     .orElseThrow(() -> NotFoundException.resource("Session", request.sessionId()));
+            course = session.getCourse();
+            if (currentUser.getRole() != Role.ADMIN
+                    && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
+                throw new BusinessException("You are not assigned to this course");
+            }
         }
         CourseMaterial material = new CourseMaterial();
         material.setCourse(course);

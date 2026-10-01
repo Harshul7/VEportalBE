@@ -110,9 +110,22 @@ public class FacultyController {
     public ResponseEntity<ApiResponse<FacultyDashboardStats>> dashboard() {
         UserAccount currentUser = authenticatedUserProvider.currentUser();
         List<Course> courses = coursesForCurrentUser(currentUser);
-        long totalStudents = studentRepository.count();
-        long classesConducted = sessionRepository.count();
-        long materialsCount = materialRepository.count();
+        List<Long> courseIds = courses.stream().map(Course::getId).toList();
+        List<Long> studentIds = courseIds.stream()
+                .flatMap(id -> courseStudentRepository.findByCourseId(id).stream())
+                .map(org.example.veportal.entity.CourseStudent::getStudentId).distinct().toList();
+        long totalStudents = studentIds.size();
+        long classesConducted = courseIds.stream().mapToLong(id -> sessionRepository.countByCourseIdAndStatus(id, SessionStatus.COMPLETED)).sum();
+        long materialsCount = courseIds.isEmpty() ? 0 : materialRepository.countByCourseIdIn(courseIds);
+        List<Long> sessionIds = courseIds.stream().flatMap(id -> sessionRepository.findAllWithFacultyByCourse(id).stream())
+                .map(org.example.veportal.entity.ClassSession::getId).toList();
+        long totalAttendance = 0;
+        long presentAttendance = 0;
+        for (var aggregate : attendanceRepository.aggregateBySessions(sessionIds)) {
+            totalAttendance += aggregate.getTotal();
+            presentAttendance += aggregate.getPresent();
+        }
+        double averageAttendance = totalAttendance == 0 ? 0.0 : presentAttendance * 100.0 / totalAttendance;
         AcademicYear current = academicYearRepository.findByCurrentTrue().orElse(null);
         String currentYear = current != null ? current.getName() : "2025-2026";
 
@@ -121,7 +134,7 @@ public class FacultyController {
                 0,
                 classesConducted,
                 totalStudents,
-                0.0,
+                averageAttendance,
                 materialsCount,
                 currentYear
         );
@@ -139,8 +152,8 @@ public class FacultyController {
                             c.getId(),
                             c.getName(),
                             c.getCode(),
-                            c.getTerm() != null ? c.getTerm() : "VE1",
-                            1,
+                            c.getCourseType() != null ? c.getCourseType() : (c.getTerm() != null ? c.getTerm() : "VE1"),
+                            c.getSemester() == null ? 1 : c.getSemester(),
                             year != null ? year.getId() : 0,
                             year != null ? year.getName() : "",
                             c.getStatus() != null ? c.getStatus() : "ACTIVE",
@@ -333,9 +346,9 @@ public class FacultyController {
                 ? "Class Session on " + (body.sessionDate() == null ? LocalDate.now() : LocalDate.parse(body.sessionDate()))
                 : body.topic().trim());
         session.setSessionDate(LocalDate.parse(body.sessionDate()));
-        session.setStartTime("10:00");
-        session.setEndTime("11:30");
-        session.setRoom("LH-1");
+        session.setStartTime(body.startTime() == null || body.startTime().isBlank() ? "10:00" : body.startTime());
+        session.setEndTime(body.endTime() == null || body.endTime().isBlank() ? "11:30" : body.endTime());
+        session.setRoom(body.room() == null || body.room().isBlank() ? "LH-1" : body.room());
         session.setFaculty(currentUser);
         session.setStatus(SessionStatus.UPCOMING);
         ClassSession saved = sessionRepository.save(session);
@@ -446,6 +459,9 @@ public class FacultyController {
             String sessionDate,
             String topic,
             String description,
-            String remarks
+            String remarks,
+            String startTime,
+            String endTime,
+            String room
     ) {}
 }

@@ -64,7 +64,7 @@ public class AttendanceService {
 
         String term = search == null ? "" : search.trim().toLowerCase();
         return students.stream()
-                .filter(student -> enrolledIds.isEmpty() || enrolledIds.contains(student.getId()))
+                .filter(student -> enrolledIds.contains(student.getId()))
                 .filter(student -> term.isEmpty()
                         || student.getFullName().toLowerCase().contains(term)
                         || student.getStudentCode().toLowerCase().contains(term)
@@ -82,12 +82,12 @@ public class AttendanceService {
         for (AttendanceRecord record : attendanceRepository.findWithStudentBySessionId(session.getId())) {
             existingByStudent.put(record.getStudent().getId(), record);
         }
+        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
+                .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
         for (var entry : request.entries()) {
             Student student = studentRepository.findByStudentCodeIgnoreCase(entry.studentId().trim())
                     .orElseThrow(() -> NotFoundException.resource("Student", entry.studentId()));
-            List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
-                    .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
-            if (!enrolledIds.isEmpty() && !enrolledIds.contains(student.getId())) {
+            if (!enrolledIds.contains(student.getId())) {
                 throw NotFoundException.resource("Enrolled student", entry.studentId());
             }
             AttendanceStatus status = Labels.toAttendanceStatus(entry.status());

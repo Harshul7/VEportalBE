@@ -103,9 +103,14 @@ public class SessionService {
 
         List<org.example.veportal.dto.response.SessionListItemResponse> items = result.map(session -> {
             Long id = session.getId();
-            return new org.example.veportal.dto.response.SessionListItemResponse(
+                    return new org.example.veportal.dto.response.SessionListItemResponse(
                     id.toString(),
                     session.getSessionNumber(),
+                    session.getCourse().getId(),
+                    session.getCourse().getName(),
+                    session.getChapter() == null ? null : session.getChapter().getId(),
+                    session.getChapter() == null ? "" : session.getChapter().getTitle(),
+                    session.getChapter() == null ? 0 : session.getChapter().getChapterNumber(),
                     session.getTopic(),
                     session.getSessionDate().toString(),
                     session.getStartTime(),

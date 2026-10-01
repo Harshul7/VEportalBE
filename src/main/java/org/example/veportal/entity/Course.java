@@ -10,7 +10,7 @@ import jakarta.persistence.UniqueConstraint;
 
 @Entity
 @Table(name = "courses", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_courses_code", columnNames = "code")
+        @UniqueConstraint(name = "uq_courses_academic_year_code", columnNames = {"academic_year_id", "code"})
 })
 public class Course extends BaseEntity {
 
@@ -39,7 +39,7 @@ public class Course extends BaseEntity {
     @JoinColumn(name = "faculty_id")
     private UserAccount faculty;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "academic_year_id")
     private AcademicYear academicYear;
 

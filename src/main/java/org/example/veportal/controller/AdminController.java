@@ -21,6 +21,8 @@ import org.example.veportal.entity.Role;
 import org.example.veportal.entity.Student;
 import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.entity.MasterChapterTemplate;
+import org.example.veportal.entity.MasterCourseTemplate;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.BranchRepository;
@@ -34,6 +36,8 @@ import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.repository.TeachingLogRepository;
+import org.example.veportal.repository.MasterChapterTemplateRepository;
+import org.example.veportal.repository.MasterCourseTemplateRepository;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.service.MailService;
 import org.example.veportal.service.AuthService;
@@ -83,6 +87,8 @@ public class AdminController {
     private final MailService mailService;
     private final AuthService authService;
     private final TeachingLogRepository teachingLogRepository;
+    private final MasterCourseTemplateRepository masterCourseTemplateRepository;
+    private final MasterChapterTemplateRepository masterChapterTemplateRepository;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
@@ -98,7 +104,9 @@ public class AdminController {
                            PasswordEncoder passwordEncoder,
                            MailService mailService,
                            AuthService authService,
-                           TeachingLogRepository teachingLogRepository) {
+                           TeachingLogRepository teachingLogRepository,
+                           MasterCourseTemplateRepository masterCourseTemplateRepository,
+                           MasterChapterTemplateRepository masterChapterTemplateRepository) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -114,6 +122,8 @@ public class AdminController {
         this.mailService = mailService;
         this.authService = authService;
         this.teachingLogRepository = teachingLogRepository;
+        this.masterCourseTemplateRepository = masterCourseTemplateRepository;
+        this.masterChapterTemplateRepository = masterChapterTemplateRepository;
     }
 
     @GetMapping("/dashboard")
@@ -207,17 +217,24 @@ public class AdminController {
             s.setFaculty(faculty);
         }
         Student saved = studentRepository.save(s);
+        if (request.courseId() != null) {
+            if (!courseRepository.existsById(request.courseId())) {
+                return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
+            }
+            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId()));
+        }
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, null), "Student created"));
     }
 
     @PostMapping(value = "/students/import", consumes = "multipart/form-data")
     public ResponseEntity<ApiResponse<StudentImportResult>> importStudents(
             @RequestParam("file") MultipartFile file,
-            @RequestParam Long facultyId,
-            @RequestParam(required = false) Long academicYearId) {
+            @RequestParam(required = false) Long facultyId,
+            @RequestParam(required = false) Long academicYearId,
+            @RequestParam(required = false) Long courseId) {
         if (file.isEmpty()) return ResponseEntity.ok(ApiResponse.error("Excel file is required"));
-        UserAccount faculty = userAccountRepository.findById(facultyId).orElse(null);
-        if (faculty == null || faculty.getRole() != Role.FACULTY) {
+        UserAccount faculty = facultyId == null ? null : userAccountRepository.findById(facultyId).orElse(null);
+        if (facultyId != null && (faculty == null || faculty.getRole() != Role.FACULTY)) {
             return ResponseEntity.ok(ApiResponse.error("Selected professor was not found"));
         }
         int imported = 0;
@@ -252,8 +269,11 @@ public class AdminController {
                 student.setBranchCode(programmeColumn < 0 ? null : value(formatter, row, programmeColumn, null));
                 student.setBatch(academicYearBatchName(academicYearId));
                 student.setStatus(AccountStatus.ACTIVE);
-                student.setFaculty(faculty);
+                if (faculty != null) student.setFaculty(faculty);
                 studentRepository.save(student);
+                if (courseId != null && courseRepository.existsById(courseId)) {
+                    courseStudentRepository.save(new CourseStudent(courseId, student.getId()));
+                }
                 imported++;
             }
         } catch (Exception e) {
@@ -301,6 +321,10 @@ public class AdminController {
             s.setBatch(academicYearBatchName(request.academicYearId()));
         }
         Student saved = studentRepository.save(s);
+        if (request.courseId() != null && courseRepository.existsById(request.courseId())
+                && !courseStudentRepository.existsByCourseIdAndStudentId(request.courseId(), saved.getId())) {
+            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId()));
+        }
         Double percent = attendancePercentages(List.of(saved)).get(saved.getId());
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, percent), "Student updated"));
     }
@@ -376,6 +400,12 @@ public class AdminController {
         user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
         UserAccount saved = userAccountRepository.save(user);
+        if (request.courseId() != null) {
+            if (!courseRepository.existsById(request.courseId())) {
+                return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
+            }
+            courseFacultyRepository.save(new CourseFaculty(request.courseId(), saved.getId()));
+        }
         authService.issuePasswordSetup(saved);
         return ResponseEntity.ok(ApiResponse.success(
                 toFacultyItem(saved), "Faculty created; an activation link was sent by email"));
@@ -525,8 +555,8 @@ public class AdminController {
         }
         String code = request.code() == null || request.code().isBlank()
                 ? "VE-" + System.currentTimeMillis() : request.code().trim();
-        if (courseRepository.findByCode(code).isPresent()) {
-            return ResponseEntity.ok(ApiResponse.error("A course with code " + code + " already exists"));
+        if (courseRepository.findByAcademicYearIdAndCode(academicYear.getId(), code).isPresent()) {
+            return ResponseEntity.ok(ApiResponse.error("A course with code " + code + " already exists in " + academicYear.getName()));
         }
         Course course = new Course();
         course.setCode(code);
@@ -537,7 +567,57 @@ public class AdminController {
         course.setStatus("ACTIVE");
         course.setAcademicYear(academicYear);
         Course saved = courseRepository.save(course);
+        masterCourseTemplateRepository.findByCode(course.getCourseType())
+                .filter(template -> template.getSemester().equals(course.getSemester()))
+                .ifPresent(template -> masterChapterTemplateRepository
+                        .findByCourseTemplateIdAndStatusOrderByChapterNumberAsc(template.getId(), "ACTIVE")
+                        .forEach(master -> {
+                            Chapter chapter = new Chapter();
+                            chapter.setCourse(saved);
+                            chapter.setChapterNumber(master.getChapterNumber());
+                            chapter.setTitle(master.getTitle());
+                            chapter.setDescription(master.getDescription());
+                            chapter.setDisplayOrder(master.getChapterNumber());
+                            chapter.setStatus("ACTIVE");
+                            chapterRepository.save(chapter);
+                        }));
         return ResponseEntity.ok(ApiResponse.success(toCourseItem(saved), "Course created"));
+    }
+
+    @GetMapping("/master-data/courses")
+    public ResponseEntity<ApiResponse<List<MasterCourseTemplateItem>>> masterCourses() {
+        List<MasterCourseTemplateItem> result = masterCourseTemplateRepository.findByStatusOrderBySemesterAscCodeAsc("ACTIVE")
+                .stream().map(template -> new MasterCourseTemplateItem(
+                        template.getId(), template.getCode(), template.getName(), template.getCourseType(),
+                        template.getSemester(), masterChapterTemplateRepository
+                                .findByCourseTemplateIdAndStatusOrderByChapterNumberAsc(template.getId(), "ACTIVE")
+                                .stream().map(this::toMasterChapterItem).toList())).toList();
+        return ResponseEntity.ok(ApiResponse.success(result, "Master curriculum retrieved"));
+    }
+
+    @PostMapping("/master-data/courses/{templateId}/chapters")
+    public ResponseEntity<ApiResponse<MasterChapterItem>> createMasterChapter(@PathVariable Long templateId,
+                                                                                @RequestBody CreateMasterChapterRequest request) {
+        MasterCourseTemplate template = masterCourseTemplateRepository.findById(templateId).orElse(null);
+        if (template == null) return ResponseEntity.ok(ApiResponse.error("Master course not found"));
+        if (request.title() == null || request.title().isBlank()) return ResponseEntity.ok(ApiResponse.error("Chapter title is required"));
+        int nextNumber = (int) masterChapterTemplateRepository.countByCourseTemplateIdAndStatus(templateId, "ACTIVE") + 1;
+        MasterChapterTemplate chapter = new MasterChapterTemplate();
+        chapter.setCourseTemplate(template);
+        chapter.setChapterNumber(nextNumber);
+        chapter.setTitle(request.title().trim());
+        chapter.setDescription(request.description() == null ? "" : request.description().trim());
+        chapter.setStatus("ACTIVE");
+        return ResponseEntity.ok(ApiResponse.success(toMasterChapterItem(masterChapterTemplateRepository.save(chapter)), "Master chapter added"));
+    }
+
+    @DeleteMapping("/master-data/courses/{templateId}/chapters/{chapterId}")
+    public ResponseEntity<ApiResponse<Object>> archiveMasterChapter(@PathVariable Long templateId, @PathVariable Long chapterId) {
+        MasterChapterTemplate chapter = masterChapterTemplateRepository.findById(chapterId).orElse(null);
+        if (chapter == null || !chapter.getCourseTemplate().getId().equals(templateId)) return ResponseEntity.ok(ApiResponse.error("Master chapter not found"));
+        chapter.setStatus("ARCHIVED");
+        masterChapterTemplateRepository.save(chapter);
+        return ResponseEntity.ok(ApiResponse.success(null, "Master chapter archived"));
     }
 
     @GetMapping("/courses/{courseId}/chapters")
@@ -643,6 +723,13 @@ public class AdminController {
             }
         }
         for (Long facultyId : facultyIds) {
+            courseFacultyRepository.findByFacultyId(facultyId).stream()
+                    .filter(existing -> !existing.getCourseId().equals(courseId))
+                    .filter(existing -> courseRepository.findById(existing.getCourseId())
+                            .map(other -> other.getAcademicYear() != null && course.getAcademicYear() != null
+                                    && other.getAcademicYear().getId().equals(course.getAcademicYear().getId()))
+                            .orElse(false))
+                    .forEach(courseFacultyRepository::delete);
             if (!currentIds.contains(facultyId) && userAccountRepository.findById(facultyId)
                     .filter(u -> u.getRole() == Role.FACULTY).isPresent()) {
                 courseFacultyRepository.save(new CourseFaculty(courseId, facultyId));
@@ -682,6 +769,13 @@ public class AdminController {
             }
         }
         for (Long studentId : studentIds) {
+            courseStudentRepository.findAll().stream()
+                    .filter(existing -> existing.getStudentId().equals(studentId) && !existing.getCourseId().equals(courseId))
+                    .filter(existing -> courseRepository.findById(existing.getCourseId())
+                            .map(other -> other.getAcademicYear() != null && course.getAcademicYear() != null
+                                    && other.getAcademicYear().getId().equals(course.getAcademicYear().getId()))
+                            .orElse(false))
+                    .forEach(courseStudentRepository::delete);
             if (!currentIds.contains(studentId) && studentRepository.existsById(studentId)) {
                 courseStudentRepository.save(new CourseStudent(courseId, studentId));
             }
@@ -901,11 +995,12 @@ public class AdminController {
     ) {}
 
     public record CreateStudentRequest(String rollNumber, String name, String email,
-                                       Long branchId, Long academicYearId, Integer semester, Long facultyId) {}
+                                       Long branchId, Long academicYearId, Integer semester,
+                                       Long facultyId, Long courseId) {}
 
     public record StudentImportResult(int imported, int skipped, List<String> errors) {}
 
-    public record CreateFacultyRequest(String name, String email, String employeeId, String department) {}
+    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId) {}
 
     public record AccountCreateRequest(String role, Boolean sendEmail) {}
 
@@ -919,8 +1014,18 @@ public class AdminController {
                                       Long academicYearId) {}
 
     public record CreateChapterRequest(String title, String description) {}
+    public record CreateMasterChapterRequest(String title, String description) {}
     public record CreateTopicRequest(String title, String description, Integer displayOrder) {}
     public record TopicItem(long id, String title, String description, int displayOrder, String status) {}
+
+    public record MasterCourseTemplateItem(long id, String code, String name, String courseType,
+                                           int semester, List<MasterChapterItem> chapters) {}
+    public record MasterChapterItem(long id, int chapterNumber, String title, String description, String status) {}
+
+    private MasterChapterItem toMasterChapterItem(MasterChapterTemplate chapter) {
+        return new MasterChapterItem(chapter.getId(), chapter.getChapterNumber(), chapter.getTitle(),
+                chapter.getDescription() == null ? "" : chapter.getDescription(), chapter.getStatus());
+    }
 
     public record AssignFacultyRequest(List<Long> facultyIds) {}
 

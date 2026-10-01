@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 026-backfill-master-chapters
+      author: veportal
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO chapters (course_id, chapter_number, title, description, display_order, status, created_at, updated_at)
+              SELECT c.id, m.chapter_number, m.title, m.description, m.chapter_number, 'ACTIVE', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+              FROM courses c
+              JOIN master_course_templates t ON t.code = c.course_type AND t.semester = c.semester AND t.status = 'ACTIVE'
+              JOIN master_chapter_templates m ON m.course_template_id = t.id AND m.status = 'ACTIVE'
+              WHERE NOT EXISTS (
+                SELECT 1 FROM chapters existing
+                WHERE existing.course_id = c.id AND existing.chapter_number = m.chapter_number
+              );
+      rollback:
+        - sql:
+            sql: |
+              DELETE ch FROM chapters ch
+              JOIN courses c ON c.id = ch.course_id
+              JOIN master_course_templates t ON t.code = c.course_type AND t.semester = c.semester
+              JOIN master_chapter_templates m ON m.course_template_id = t.id AND m.chapter_number = ch.chapter_number
+              WHERE ch.created_by IS NULL;

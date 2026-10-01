@@ -14,7 +14,7 @@ import jakarta.persistence.UniqueConstraint;
 })
 public class Chapter extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 

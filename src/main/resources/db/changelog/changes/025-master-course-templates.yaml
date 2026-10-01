@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: 025-master-course-templates
+      author: veportal
+      changes:
+        - dropUniqueConstraint:
+            tableName: courses
+            constraintName: uq_courses_code
+        - addUniqueConstraint:
+            tableName: courses
+            columnNames: academic_year_id, code
+            constraintName: uq_courses_academic_year_code
+        - createTable:
+            tableName: master_course_templates
+            columns:
+              - column: {name: id, type: bigint, autoIncrement: true, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: code, type: varchar(40), constraints: {nullable: false}}
+              - column: {name: name, type: varchar(150), constraints: {nullable: false}}
+              - column: {name: course_type, type: varchar(30), constraints: {nullable: false}}
+              - column: {name: semester, type: int, constraints: {nullable: false}}
+              - column: {name: status, type: varchar(20), defaultValue: ACTIVE, constraints: {nullable: false}}
+              - column: {name: created_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: created_by, type: varchar(120)}
+              - column: {name: updated_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: updated_by, type: varchar(120)}
+        - addUniqueConstraint:
+            tableName: master_course_templates
+            columnNames: code
+            constraintName: uq_master_course_template_code
+        - createTable:
+            tableName: master_chapter_templates
+            columns:
+              - column: {name: id, type: bigint, autoIncrement: true, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: course_template_id, type: bigint, constraints: {nullable: false}}
+              - column: {name: chapter_number, type: int, constraints: {nullable: false}}
+              - column: {name: title, type: varchar(200), constraints: {nullable: false}}
+              - column: {name: description, type: varchar(2000)}
+              - column: {name: status, type: varchar(20), defaultValue: ACTIVE, constraints: {nullable: false}}
+              - column: {name: created_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: created_by, type: varchar(120)}
+              - column: {name: updated_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: updated_by, type: varchar(120)}
+        - addUniqueConstraint:
+            tableName: master_chapter_templates
+            columnNames: course_template_id, chapter_number
+            constraintName: uq_master_chapter_template_number
+        - addForeignKeyConstraint:
+            baseTableName: master_chapter_templates
+            baseColumnNames: course_template_id
+            referencedTableName: master_course_templates
+            referencedColumnNames: id
+            constraintName: fk_master_chapter_template_course
+            onDelete: CASCADE
+        - insert: {tableName: master_course_templates, columns: [{column: {name: code, value: VE1}}, {column: {name: name, value: Value Education I}}, {column: {name: course_type, value: VE1}}, {column: {name: semester, valueNumeric: 1}}, {column: {name: status, value: ACTIVE}}]}
+        - insert: {tableName: master_course_templates, columns: [{column: {name: code, value: VE2}}, {column: {name: name, value: Value Education II}}, {column: {name: course_type, value: VE2}}, {column: {name: semester, valueNumeric: 2}}, {column: {name: status, value: ACTIVE}}]}
+        - sql:
+            sql: |
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 1, 'Self-exploration and human aspirations', 'Understanding the purpose of education, self-exploration, and the human aspiration for happiness and prosperity.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE1';
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 2, 'Harmony in the self', 'Understanding the relationship between the self and the body, and developing clarity in thought and action.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE1';
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 3, 'Harmony in family and society', 'Exploring trust, respect, responsibility, and mutually fulfilling relationships.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE1';
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 1, 'Professional ethics and human values', 'Connecting values, competence, and ethical responsibility in professional life.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE2';
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 2, 'Technology, society, and responsibility', 'Reflecting on the social impact of technology and responsible professional decision-making.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE2';
+              INSERT INTO master_chapter_templates (course_template_id, chapter_number, title, description, status)
+              SELECT id, 3, 'Sustainable coexistence and action', 'Applying human values to sustainability, collaboration, and an individual action plan.', 'ACTIVE' FROM master_course_templates WHERE code = 'VE2';
+      rollback:
+        - dropTable: {tableName: master_chapter_templates}
+        - dropTable: {tableName: master_course_templates}
+        - dropUniqueConstraint: {tableName: courses, constraintName: uq_courses_academic_year_code}
+        - addUniqueConstraint: {tableName: courses, columnNames: code, constraintName: uq_courses_code}

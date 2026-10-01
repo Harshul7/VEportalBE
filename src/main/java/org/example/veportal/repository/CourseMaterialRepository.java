@@ -12,6 +12,8 @@ public interface CourseMaterialRepository extends JpaRepository<CourseMaterial, 
 
     List<CourseMaterial> findAllByOrderByIdAsc();
 
+    long countByCourseIdIn(Collection<Long> courseIds);
+
     @Query("""
             select m from CourseMaterial m
             join fetch m.uploadedBy u

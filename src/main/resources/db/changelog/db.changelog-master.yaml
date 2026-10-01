@@ -47,3 +47,7 @@ databaseChangeLog:
       file: db/changelog/changes/023-course-type-semester.yaml
   - include:
       file: db/changelog/changes/024-student-professor-mapping.yaml
+  - include:
+      file: db/changelog/changes/025-master-course-templates.yaml
+  - include:
+      file: db/changelog/changes/026-backfill-master-chapters.yaml

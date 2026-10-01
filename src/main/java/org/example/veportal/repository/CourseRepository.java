@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CourseRepository extends JpaRepository<Course, Long> {
 
     Optional<Course> findByCode(String code);
+    Optional<Course> findByAcademicYearIdAndCode(Long academicYearId, String code);
 
     List<Course> findByAcademicYearIdOrderByCodeAsc(Long academicYearId);
 
