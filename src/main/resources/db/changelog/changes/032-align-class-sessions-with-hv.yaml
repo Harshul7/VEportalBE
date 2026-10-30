@@ -1,0 +1,134 @@
+databaseChangeLog:
+  - changeSet:
+      id: 032-align-class-sessions-with-hv
+      author: ve-portal
+      comment: Align the legacy VE Course session workspace and related metadata with the HV Book curriculum.
+      changes:
+        - sql:
+            sql: |
+              UPDATE class_sessions cs
+              JOIN courses c ON c.id = cs.course_id
+              SET cs.topic = CASE cs.session_number
+                WHEN 1 THEN 'Purpose and Scope of Value Education'
+                WHEN 2 THEN 'Self-exploration and Natural Acceptance'
+                WHEN 3 THEN 'Human Aspirations: Continuous Happiness and Prosperity'
+                WHEN 4 THEN 'The Human Being: Co-existence of Self and Body'
+                WHEN 5 THEN 'Understanding Myself: Desire, Thought and Expectation'
+                WHEN 6 THEN 'Sanyama and Sv-asthya: Harmony with the Body'
+                WHEN 7 THEN 'Prosperity, Physical Facilities and Sufficiency'
+                WHEN 8 THEN 'Trust, Respect and Justice in Family Relationships'
+                WHEN 9 THEN 'Undivided Society and Universal Human Order'
+                WHEN 10 THEN 'Interconnectedness and Mutual Fulfilment in Nature'
+                WHEN 11 THEN 'Existence as Co-existence'
+                WHEN 12 THEN 'Universal Human Values and Ethical Human Conduct'
+                WHEN 13 THEN 'The Holistic Alternative and Universal Human Order'
+                WHEN 14 THEN 'Professional Ethics and Responsible Decisions'
+                WHEN 15 THEN 'Holistic Technologies, Production and Management'
+                WHEN 16 THEN 'The Road Ahead: Action and Institutional Responsibility'
+                WHEN 17 THEN 'Professional Ethics Case Clinic'
+                WHEN 18 THEN 'Holistic Technology Design Studio'
+                WHEN 19 THEN 'Universal Human Order Action Lab'
+                WHEN 20 THEN 'Course Synthesis and Reflective Dialogue'
+              END,
+              cs.title = CASE cs.session_number
+                WHEN 1 THEN 'Orientation: Why Value Education Matters'
+                WHEN 2 THEN 'Workshop: Verify through Self-exploration'
+                WHEN 3 THEN 'Dialogue: The Programme for Human Fulfilment'
+                WHEN 4 THEN 'Concept Session: Self, Body and Co-existence'
+                WHEN 5 THEN 'Reflection Lab: Understanding Myself'
+                WHEN 6 THEN 'Practice Lab: Sanyama and Sv-asthya'
+                WHEN 7 THEN 'Application Lab: Prosperity and Sufficiency'
+                WHEN 8 THEN 'Dialogue Lab: Values in Family Relationships'
+                WHEN 9 THEN 'Systems Dialogue: From Family to World Family Order'
+                WHEN 10 THEN 'Systems Lab: Nature and Mutual Fulfilment'
+                WHEN 11 THEN 'Concept Session: Existence as Co-existence'
+                WHEN 12 THEN 'Case Lab: Ethical Human Conduct'
+                WHEN 13 THEN 'Design Dialogue: A Holistic Alternative'
+                WHEN 14 THEN 'Case Clinic: Professional Ethics'
+                WHEN 15 THEN 'Design Studio: Holistic Technology and Management'
+                WHEN 16 THEN 'Action Workshop: The Road Ahead'
+                WHEN 17 THEN 'Case Clinic: Ethical Professional Decisions'
+                WHEN 18 THEN 'Design Studio: Humane and Sustainable Systems'
+                WHEN 19 THEN 'Action Lab: Universal Human Order on Campus'
+                WHEN 20 THEN 'Synthesis: Learning, Practice and Commitment'
+              END,
+              cs.description = CASE cs.session_number
+                WHEN 1 THEN 'Introduces the purpose, scope and verification-oriented approach of value education, with the learning journey mapped across the human being, relationships, society, nature and professional life.'
+                WHEN 2 THEN 'Guides learners through self-exploration as a dialogue between a proposal, natural acceptance and experiential verification, without imposing conclusions.'
+                WHEN 3 THEN 'Connects the aspiration for continuous happiness and prosperity with a practical programme for harmony in the self, family, society and nature.'
+                WHEN 4 THEN 'Examines the human being as the co-existence of the conscious self and the material body, including their distinct needs and activities.'
+                WHEN 5 THEN 'Uses reflection on desire, thought and expectation to identify inner contradictions and develop clarity for responsible action.'
+                WHEN 6 THEN 'Explores self-regulation, care of the body, health and balanced living through the ideas of sanyama and sv-asthya.'
+                WHEN 7 THEN 'Distinguishes prosperity from accumulation and evaluates physical facilities through sufficiency, responsible use and mutual fulfilment.'
+                WHEN 8 THEN 'Practises trust, respect, affection, care and justice as foundations for mutually fulfilling family relationships.'
+                WHEN 9 THEN 'Extends the understanding of justice from family relationships to undivided society, fearlessness and universal human order.'
+                WHEN 10 THEN 'Maps the four orders of nature, interconnectedness, cyclic processes and mutual fulfilment to responsible human participation.'
+                WHEN 11 THEN 'Builds a holistic view of existence as co-existence, connecting the human being, society and nature rather than treating them as isolated systems.'
+                WHEN 12 THEN 'Applies universal human values and right understanding to professional dilemmas, conduct, accountability and long-term consequences.'
+                WHEN 13 THEN 'Explores education, health, justice, production and social arrangements as parts of a holistic alternative oriented to human fulfilment.'
+                WHEN 14 THEN 'Analyses professional responsibility beyond compliance, including affected stakeholders, ethical judgement, competence and non-harm.'
+                WHEN 15 THEN 'Evaluates technology, production and management models by their impact on people, society, ecology, participation and long-term sustainability.'
+                WHEN 16 THEN 'Synthesises the course and converts understanding into a personal, academic or institutional action plan with measurable follow-up.'
+                WHEN 17 THEN 'Applies the professional ethics framework to realistic technology and academic workplace cases through structured dialogue and decision notes.'
+                WHEN 18 THEN 'Designs a humane and sustainable campus or enterprise solution using stakeholder participation, ecological responsibility and mutual benefit.'
+                WHEN 19 THEN 'Creates an actionable campus intervention that connects right understanding, relationships, responsible resources and institutional cooperation.'
+                WHEN 20 THEN 'Consolidates learning through reflection, peer dialogue and a commitment plan connecting personal conduct with professional and social responsibility.'
+              END,
+              cs.session_type = 'HV_CURRICULUM',
+              cs.mode = CASE WHEN cs.session_number IN (2, 5, 6, 8, 10, 14, 15, 17, 18, 19, 20) THEN 'WORKSHOP' ELSE 'LECTURE_DIALOGUE' END,
+              cs.chapter_id = (SELECT ch.id FROM chapters ch WHERE ch.course_id = cs.course_id AND ch.chapter_number = CASE WHEN cs.session_number > 16 THEN 16 ELSE cs.session_number END)
+              WHERE c.name = 'VE Course' AND cs.session_number BETWEEN 1 AND 20;
+
+              UPDATE teaching_logs tl
+              JOIN class_sessions cs ON cs.id = tl.session_id
+              JOIN courses c ON c.id = cs.course_id
+              SET tl.content = CONCAT('HV Book alignment: ', cs.description, ' The session used dialogue, reflection and application activities so learners could connect the chapter proposal with lived experience and responsible professional practice.'),
+                  tl.remarks = 'Teaching log retained and aligned to the Value Education curriculum; attendance, materials and historical session record remain unchanged.',
+                  tl.updated_at = CURRENT_TIMESTAMP(6)
+              WHERE c.name = 'VE Course';
+
+              DELETE tlc FROM teaching_log_concepts tlc
+              JOIN teaching_logs tl ON tl.id = tlc.log_id
+              JOIN class_sessions cs ON cs.id = tl.session_id
+              JOIN courses c ON c.id = cs.course_id
+              WHERE c.name = 'VE Course';
+
+              INSERT INTO teaching_log_concepts (log_id, label, position, created_at, updated_at)
+              SELECT tl.id, CONCAT('Chapter ', ch.chapter_number, ': ', ch.title), 0, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+              FROM teaching_logs tl
+              JOIN class_sessions cs ON cs.id = tl.session_id
+              JOIN courses c ON c.id = cs.course_id
+              JOIN chapters ch ON ch.id = cs.chapter_id
+              WHERE c.name = 'VE Course';
+
+              UPDATE course_materials cm
+              JOIN class_sessions cs ON cs.id = cm.session_id
+              JOIN courses c ON c.id = cs.course_id
+              JOIN chapters ch ON ch.id = cs.chapter_id
+              SET cm.title = CASE cs.session_number
+                WHEN 1 THEN 'Value Education Orientation and HV Book Guide'
+                WHEN 2 THEN 'Self-exploration Workshop Notes'
+                WHEN 3 THEN 'Human Aspirations and Fulfilment Notes'
+                WHEN 4 THEN 'Self and Body: Co-existence Slides'
+                WHEN 5 THEN 'Understanding Myself Reflection Guide'
+                WHEN 6 THEN 'Sanyama and Sv-asthya Practice Notes'
+                WHEN 7 THEN 'Prosperity and Sufficiency Case Pack'
+                WHEN 8 THEN 'Values in Family Relationships Dialogue Pack'
+                WHEN 9 THEN 'Universal Human Order Discussion Guide'
+                WHEN 10 THEN 'Nature, Interconnectedness and Mutual Fulfilment Notes'
+                WHEN 11 THEN 'Existence as Co-existence Reading Guide'
+                WHEN 12 THEN 'Universal Human Values and Ethical Conduct Case Pack'
+                WHEN 13 THEN 'Holistic Alternative Design Brief'
+                WHEN 14 THEN 'Professional Ethics Case Clinic Pack'
+                WHEN 15 THEN 'Holistic Technology and Management Design Pack'
+                WHEN 16 THEN 'The Road Ahead Action Plan'
+                WHEN 17 THEN 'Professional Ethics Decision Workbook'
+                WHEN 18 THEN 'Humane and Sustainable Systems Studio Pack'
+                WHEN 19 THEN 'Universal Human Order Campus Action Brief'
+                WHEN 20 THEN 'Course Synthesis and Reflection Guide'
+              END,
+              cm.description = CONCAT('Supporting material for Chapter ', ch.chapter_number, ': ', ch.title, '. Includes prompts for dialogue, reflection and application in the context of Value Education.'),
+              cm.updated_at = CURRENT_TIMESTAMP(6)
+              WHERE c.name = 'VE Course'
+                AND cs.session_number BETWEEN 1 AND 20
+                ;

@@ -75,7 +75,7 @@ public class ExportController {
     }
 
     @GetMapping("/admin/exports/{dataset}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
     @Transactional(readOnly = true)
     public ResponseEntity<byte[]> adminExport(@PathVariable String dataset,
                                               @RequestParam(defaultValue = "xlsx") String format) {
@@ -89,7 +89,7 @@ public class ExportController {
     }
 
     @GetMapping("/faculty/exports/{dataset}")
-    @PreAuthorize("hasRole('FACULTY')")
+    @PreAuthorize("hasAnyRole('GROUP_MENTOR','TA','FACULTY')")
     @Transactional(readOnly = true)
     public ResponseEntity<byte[]> facultyExport(@PathVariable String dataset,
                                                 @RequestParam(defaultValue = "xlsx") String format) {
@@ -176,6 +176,9 @@ public class ExportController {
     }
 
     private List<Course> assignedCourses(UserAccount user) {
+        if (user.getRole() == org.example.veportal.entity.Role.TA) {
+            return courseRepository.findAll();
+        }
         List<Long> ids = courseFacultyRepository.findByFacultyId(user.getId()).stream()
                 .map(CourseFaculty::getCourseId).toList();
         return courseRepository.findAllById(ids);

@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 033-fix-hv-session-chapter-mapping
+      author: ve-portal
+      comment: Correct capstone session chapter mappings after the HV curriculum alignment.
+      changes:
+        - sql:
+            sql: |
+              UPDATE class_sessions cs
+              JOIN courses c ON c.id = cs.course_id
+              SET cs.chapter_id = (SELECT ch.id FROM chapters ch WHERE ch.course_id = cs.course_id AND ch.chapter_number = CASE cs.session_number WHEN 17 THEN 14 WHEN 18 THEN 15 ELSE 16 END)
+              WHERE c.name = 'VE Course' AND cs.session_number BETWEEN 17 AND 20;
+
+              UPDATE course_materials cm
+              JOIN class_sessions cs ON cs.id = cm.session_id
+              JOIN courses c ON c.id = cs.course_id
+              JOIN chapters ch ON ch.id = cs.chapter_id
+              SET cm.description = CONCAT('Supporting material for Chapter ', ch.chapter_number, ': ', ch.title, '. Includes prompts for dialogue, reflection and application in the context of Value Education.'),
+                  cm.updated_at = CURRENT_TIMESTAMP(6)
+              WHERE c.name = 'VE Course' AND cs.session_number BETWEEN 17 AND 20;
+
+              DELETE tlc FROM teaching_log_concepts tlc
+              JOIN teaching_logs tl ON tl.id = tlc.log_id
+              JOIN class_sessions cs ON cs.id = tl.session_id
+              JOIN courses c ON c.id = cs.course_id
+              WHERE c.name = 'VE Course' AND cs.session_number BETWEEN 17 AND 20;
+
+              INSERT INTO teaching_log_concepts (log_id, label, position, created_at, updated_at)
+              SELECT tl.id, CONCAT('Chapter ', ch.chapter_number, ': ', ch.title), 0, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+              FROM teaching_logs tl
+              JOIN class_sessions cs ON cs.id = tl.session_id
+              JOIN courses c ON c.id = cs.course_id
+              JOIN chapters ch ON ch.id = cs.chapter_id
+              WHERE c.name = 'VE Course' AND cs.session_number BETWEEN 17 AND 20;

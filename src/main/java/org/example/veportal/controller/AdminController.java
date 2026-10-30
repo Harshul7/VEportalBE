@@ -69,7 +69,7 @@ import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
 public class AdminController {
 
     private final UserAccountRepository userAccountRepository;
@@ -130,7 +130,7 @@ public class AdminController {
     public ResponseEntity<ApiResponse<DashboardStats>> dashboard() {
         long totalStudents = studentRepository.count();
         long totalFaculty = userAccountRepository.findAll().stream()
-                .filter(u -> u.getRole() == Role.FACULTY)
+                .filter(u -> u.getRole().isMentor() || u.getRole() == Role.TA)
                 .count();
         long activeCourses = courseRepository.findAll().stream()
                 .filter(c -> "ACTIVE".equalsIgnoreCase(c.getStatus())).count();
@@ -211,7 +211,7 @@ public class AdminController {
         s.setBatch(academicYearBatchName(request.academicYearId()));
         if (request.facultyId() != null) {
             UserAccount faculty = userAccountRepository.findById(request.facultyId()).orElse(null);
-            if (faculty == null || faculty.getRole() != Role.FACULTY) {
+            if (faculty == null || !faculty.getRole().isMentor()) {
                 return ResponseEntity.ok(ApiResponse.error("Selected professor was not found"));
             }
             s.setFaculty(faculty);
@@ -234,7 +234,7 @@ public class AdminController {
             @RequestParam(required = false) Long courseId) {
         if (file.isEmpty()) return ResponseEntity.ok(ApiResponse.error("Excel file is required"));
         UserAccount faculty = facultyId == null ? null : userAccountRepository.findById(facultyId).orElse(null);
-        if (facultyId != null && (faculty == null || faculty.getRole() != Role.FACULTY)) {
+        if (facultyId != null && (faculty == null || !faculty.getRole().isMentor())) {
             return ResponseEntity.ok(ApiResponse.error("Selected professor was not found"));
         }
         int imported = 0;
@@ -364,7 +364,7 @@ public class AdminController {
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         List<FacultyListItem> faculty = userAccountRepository.findAll().stream()
-                .filter(u -> u.getRole() == Role.FACULTY)
+                .filter(u -> u.getRole().isMentor() || u.getRole() == Role.TA)
                 .filter(u -> search == null || search.isBlank()
                         || u.getFullName().toLowerCase().contains(search.toLowerCase())
                         || u.getEmail().toLowerCase().contains(search.toLowerCase()))
@@ -395,7 +395,7 @@ public class AdminController {
         user.setStaffCode(employeeId == null || employeeId.isBlank()
                 ? generatedStaffCode() : request.employeeId().trim());
         user.setDepartment(request.department() == null ? "" : request.department().trim());
-        user.setRole(Role.FACULTY);
+        user.setRole(Role.GROUP_MENTOR);
         user.setStatus(AccountStatus.ACTIVE);
         user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
@@ -418,10 +418,12 @@ public class AdminController {
         if (user == null) {
             return ResponseEntity.ok(ApiResponse.error("Faculty not found"));
         }
-        if (request.role() != null && "ADMIN".equalsIgnoreCase(request.role())) {
-            user.setRole(Role.ADMIN);
+        if (request.role() != null && ("FACULTY_COORDINATOR".equalsIgnoreCase(request.role()) || "ADMIN".equalsIgnoreCase(request.role()))) {
+            user.setRole(Role.FACULTY_COORDINATOR);
+        } else if (request.role() != null && "TA".equalsIgnoreCase(request.role())) {
+            user.setRole(Role.TA);
         } else {
-            user.setRole(Role.FACULTY);
+            user.setRole(Role.GROUP_MENTOR);
         }
         user.setStatus(AccountStatus.ACTIVE);
         user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
@@ -700,7 +702,7 @@ public class AdminController {
         List<Long> assignedIds = courseFacultyRepository.findByCourseId(courseId)
                 .stream().map(CourseFaculty::getFacultyId).toList();
         List<FacultyAssignmentItem> items = userAccountRepository.findAll().stream()
-                .filter(u -> u.getRole() == Role.FACULTY)
+                .filter(u -> u.getRole().isMentor())
                 .map(u -> new FacultyAssignmentItem(u.getId(), u.getFullName(), u.getEmail(),
                         u.getStaffCode(), assignedIds.contains(u.getId())))
                 .toList();
@@ -731,7 +733,7 @@ public class AdminController {
                             .orElse(false))
                     .forEach(courseFacultyRepository::delete);
             if (!currentIds.contains(facultyId) && userAccountRepository.findById(facultyId)
-                    .filter(u -> u.getRole() == Role.FACULTY).isPresent()) {
+                    .filter(u -> u.getRole().isMentor()).isPresent()) {
                 courseFacultyRepository.save(new CourseFaculty(courseId, facultyId));
             }
         }
@@ -1000,7 +1002,7 @@ public class AdminController {
 
     public record StudentImportResult(int imported, int skipped, List<String> errors) {}
 
-    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId) {}
+    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId, String role) {}
 
     public record AccountCreateRequest(String role, Boolean sendEmail) {}
 

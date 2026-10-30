@@ -12,6 +12,8 @@ public record MaterialCreateRequest(
         @Size(max = 30, message = "Unknown material type")
         String type,
 
+        String courseId,
+
         String sessionId,
 
         String topicId,

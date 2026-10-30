@@ -107,8 +107,9 @@ public final class Labels {
 
     public static String of(Role role) {
         return switch (role) {
-            case FACULTY -> "Faculty / Mentor";
-            case ADMIN -> "Administrator";
+            case GROUP_MENTOR, FACULTY -> "Group Mentor";
+            case FACULTY_COORDINATOR, ADMIN -> "Faculty Coordinator";
+            case TA -> "Teaching Assistant";
         };
     }
 

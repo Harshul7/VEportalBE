@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 031-normalize-ve-chapter-curriculum
+      author: ve-portal
+      changes:
+        - sql:
+            sql: |
+              UPDATE chapters ch
+              JOIN courses c ON c.id = ch.course_id
+              SET ch.title = CASE ch.chapter_number
+                WHEN 1 THEN 'Understanding Value Education'
+                WHEN 2 THEN 'Self-exploration as the Process for Value Education'
+                WHEN 3 THEN 'The Program to Fulfil Basic Human Aspirations'
+                WHEN 4 THEN 'Understanding the Human Being as Co-existence of Self (I) and Body'
+                WHEN 5 THEN 'Harmony in the Self (I) - Understanding Myself'
+                WHEN 6 THEN 'Harmony with the Body - Understanding Sanyama and Sv-asthya'
+                WHEN 7 THEN 'The Basic Human Aspirations - Continuous Happiness and Prosperity'
+                WHEN 8 THEN 'Harmony in the Family - Understanding Values in Human Relationships'
+                WHEN 9 THEN 'Harmony in the Society - From Family Order to World Family Order'
+                WHEN 10 THEN 'Harmony in Nature - Understanding the Interconnectedness and Mutual Fulfilment'
+                WHEN 11 THEN 'Harmony in Existence - Understanding Existence as Co-existence'
+                WHEN 12 THEN 'Providing the Basis for Universal Human Values and Ethical Human Conduct'
+                WHEN 13 THEN 'Basis for the Holistic Alternative towards Universal Human Order'
+                WHEN 14 THEN 'Professional Ethics in the Light of Right Understanding'
+                WHEN 15 THEN 'Vision for Holistic Technologies, Production Systems and Management Models'
+                WHEN 16 THEN 'Journey towards the Holistic Alternative - The Road Ahead'
+              END,
+              ch.description = CASE ch.chapter_number
+                WHEN 1 THEN 'Section I: Introduction to Value Education. Purpose, content and relevance of value education in holistic development.'
+                WHEN 2 THEN 'Section I: Introduction to Value Education. Self-exploration through natural acceptance and experiential verification.'
+                WHEN 3 THEN 'Section I: Introduction to Value Education. The programme for continuous happiness, prosperity and harmony.'
+                WHEN 4 THEN 'Section II: Harmony in the human being. The human being as co-existence of the conscious self and the material body.'
+                WHEN 5 THEN 'Section II: Harmony in the human being. Understanding myself, my activities and inner harmony.'
+                WHEN 6 THEN 'Section II: Harmony in the human being. Sanyama, sv-asthya and responsible care of the body.'
+                WHEN 7 THEN 'Section II: Harmony in the human being. Continuous happiness and prosperity as basic human aspirations.'
+                WHEN 8 THEN 'Section II: Harmony in relationships. Trust, respect, justice and mutual fulfilment in the family.'
+                WHEN 9 THEN 'Section II: Harmony in society. From family order to undivided society and universal human order.'
+                WHEN 10 THEN 'Section II: Harmony in nature. Interconnectedness, cyclic processes and mutual fulfilment among the four orders.'
+                WHEN 11 THEN 'Section II: Harmony in existence. Existence understood as co-existence and an interconnected whole.'
+                WHEN 12 THEN 'Section III: Implications of right understanding. Universal human values and ethical human conduct.'
+                WHEN 13 THEN 'Section III: Implications of right understanding. A holistic alternative towards universal human order.'
+                WHEN 14 THEN 'Section III: Professional ethics. Applying right understanding to professional responsibility and decisions.'
+                WHEN 15 THEN 'Section III: Professional ethics. Holistic technologies, production systems and management models.'
+                WHEN 16 THEN 'Section III: The road ahead. From self-exploration to practical movement towards universal human order.'
+              END,
+              ch.status = 'ACTIVE',
+              ch.updated_at = CURRENT_TIMESTAMP(6)
+              WHERE ch.chapter_number BETWEEN 1 AND 16
+                AND (c.course_type = 'VE1' OR c.name = 'VE Course');
+      rollback:
+        - sql:
+            sql: |
+              UPDATE chapters ch
+              JOIN courses c ON c.id = ch.course_id
+              SET ch.status = CASE WHEN ch.chapter_number = 1 AND c.name = 'VE Course' THEN 'ARCHIVED' ELSE 'ACTIVE' END
+              WHERE ch.chapter_number BETWEEN 1 AND 16
+                AND (c.course_type = 'VE1' OR c.name = 'VE Course');

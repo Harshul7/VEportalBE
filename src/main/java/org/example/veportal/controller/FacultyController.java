@@ -88,7 +88,7 @@ public class FacultyController {
     }
 
     private List<Course> coursesForCurrentUser(UserAccount currentUser) {
-        if (currentUser.getRole() == Role.ADMIN) {
+        if (currentUser.getRole().isCoordinator() || currentUser.getRole() == Role.TA) {
             return courseRepository.findAll();
         }
         List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId())
@@ -100,7 +100,7 @@ public class FacultyController {
     }
 
     private boolean canAccessCourse(UserAccount user, Long courseId) {
-        if (user.getRole() == Role.ADMIN) {
+        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) {
             return true;
         }
         return courseFacultyRepository.existsByCourseIdAndFacultyId(courseId, user.getId());
@@ -317,6 +317,9 @@ public class FacultyController {
     @PostMapping("/class-sessions")
     public ResponseEntity<ApiResponse<ClassSessionListItem>> createClassSession(@RequestBody SessionCreateBodyRequest body) {
         UserAccount currentUser = authenticatedUserProvider.currentUser();
+        if (currentUser.getRole() == Role.TA) {
+            return ResponseEntity.status(403).body(ApiResponse.error("Teaching Assistants support sessions but cannot create them"));
+        }
         Long courseId = body.courseId() != null ? body.courseId() : null;
         Course course = courseId != null
                 ? courseRepository.findById(courseId)

@@ -24,7 +24,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/students")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
 public class StudentsController {
 
     private final StudentService studentService;

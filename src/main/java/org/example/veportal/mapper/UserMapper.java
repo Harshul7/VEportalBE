@@ -10,6 +10,7 @@ public class UserMapper {
 
     public UserResponse toResponse(UserAccount user) {
         return new UserResponse(
+                user.getId(),
                 user.getFullName(),
                 user.getEmail(),
                 Labels.of(user.getRole()),

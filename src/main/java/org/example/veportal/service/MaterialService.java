@@ -16,6 +16,7 @@ import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.mapper.AcademicMapper;
 import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
+import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.util.Labels;
@@ -47,6 +48,7 @@ public class MaterialService {
     private final TopicRepository topicRepository;
     private final ChapterRepository chapterRepository;
     private final CourseFacultyRepository courseFacultyRepository;
+    private final CourseRepository courseRepository;
     private final Path storageDirectory;
     private final long maxFileBytes;
 
@@ -58,6 +60,7 @@ public class MaterialService {
                            TopicRepository topicRepository,
                            ChapterRepository chapterRepository,
                            CourseFacultyRepository courseFacultyRepository,
+                           CourseRepository courseRepository,
                            AppProperties properties) {
         this.materialRepository = materialRepository;
         this.sessionRepository = sessionRepository;
@@ -67,6 +70,7 @@ public class MaterialService {
         this.topicRepository = topicRepository;
         this.chapterRepository = chapterRepository;
         this.courseFacultyRepository = courseFacultyRepository;
+        this.courseRepository = courseRepository;
         this.storageDirectory = Path.of(properties.storage().materialsDir()).toAbsolutePath().normalize();
         this.maxFileBytes = properties.storage().maxFileBytes();
     }
@@ -74,7 +78,7 @@ public class MaterialService {
     @Transactional(readOnly = true)
     public PagedResult<MaterialResponse> list(String search, String type, String sessionId, String chapterId, int page, int size, UserAccount currentUser) {
         Specification<CourseMaterial> spec = (root, query, cb) -> cb.conjunction();
-        if (currentUser.getRole() != Role.ADMIN) {
+        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA) {
             var courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
             spec = spec.and((root, query, cb) -> courseIds.isEmpty()
@@ -127,7 +131,15 @@ public class MaterialService {
 
     @Transactional
     public MaterialResponse create(MaterialCreateRequest request, UserAccount currentUser) {
-        Course course = currentCourseProvider.requireCurrentCourse();
+        Course course;
+        try {
+            course = request.courseId() == null || request.courseId().isBlank()
+                    ? currentCourseProvider.requireCurrentCourse()
+                    : courseRepository.findById(Long.parseLong(request.courseId().trim()))
+                        .orElseThrow(() -> NotFoundException.resource("Course", request.courseId()));
+        } catch (NumberFormatException e) {
+            throw new BusinessException("Invalid course reference: " + request.courseId());
+        }
         MaterialType type = Labels.toMaterialType(request.type());
         ClassSession session = null;
         if (request.sessionId() != null && !request.sessionId().isBlank()) {
@@ -140,10 +152,14 @@ public class MaterialService {
             session = sessionRepository.findById(parsedSessionId)
                     .orElseThrow(() -> NotFoundException.resource("Session", request.sessionId()));
             course = session.getCourse();
-            if (currentUser.getRole() != Role.ADMIN
+            if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
                     && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
                 throw new BusinessException("You are not assigned to this course");
             }
+        }
+        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
+                && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
+            throw new BusinessException("You are not assigned to this course");
         }
         CourseMaterial material = new CourseMaterial();
         material.setCourse(course);
@@ -152,6 +168,9 @@ public class MaterialService {
             try {
                 var topic = topicRepository.findById(Long.parseLong(request.topicId().trim()))
                         .orElseThrow(() -> NotFoundException.resource("Topic", request.topicId()));
+                if (!topic.getChapter().getCourse().getId().equals(course.getId())) {
+                    throw new BusinessException("Topic does not belong to the selected course");
+                }
                 material.setTopic(topic);
                 material.setChapter(topic.getChapter());
             } catch (NumberFormatException e) {
@@ -160,8 +179,12 @@ public class MaterialService {
         }
         if (request.chapterId() != null && !request.chapterId().isBlank() && material.getChapter() == null) {
             try {
-                material.setChapter(chapterRepository.findById(Long.parseLong(request.chapterId().trim()))
-                        .orElseThrow(() -> NotFoundException.resource("Chapter", request.chapterId())));
+                var chapter = chapterRepository.findById(Long.parseLong(request.chapterId().trim()))
+                        .orElseThrow(() -> NotFoundException.resource("Chapter", request.chapterId()));
+                if (!chapter.getCourse().getId().equals(course.getId())) {
+                    throw new BusinessException("Chapter does not belong to the selected course");
+                }
+                material.setChapter(chapter);
             } catch (NumberFormatException e) {
                 throw new BusinessException("Invalid chapter reference: " + request.chapterId());
             }
@@ -200,7 +223,7 @@ public class MaterialService {
             throw new BusinessException("Unsupported material file type");
         }
         MaterialResponse response = create(new MaterialCreateRequest(
-                request.title(), request.type(), request.sessionId(), request.topicId(), request.chapterId(), request.description(), original,
+                request.title(), request.type(), request.courseId(), request.sessionId(), request.topicId(), request.chapterId(), request.description(), original,
                 SizeFormat.format(file.getSize())), currentUser);
         Long id = Long.valueOf(response.id());
         CourseMaterial material = materialRepository.findById(id).orElseThrow();

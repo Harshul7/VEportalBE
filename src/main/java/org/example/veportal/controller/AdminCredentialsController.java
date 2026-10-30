@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/admin/credentials")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
 public class AdminCredentialsController {
 
     private final UserAccountRepository userAccountRepository;

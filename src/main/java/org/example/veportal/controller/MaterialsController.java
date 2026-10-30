@@ -65,12 +65,13 @@ public class MaterialsController {
             @RequestPart("file") MultipartFile file,
             @RequestParam String title,
             @RequestParam String type,
+            @RequestParam(required = false) String courseId,
             @RequestParam(required = false) String sessionId,
             @RequestParam(required = false) String topicId,
             @RequestParam(required = false) String chapterId,
             @RequestParam(required = false) String description) {
         MaterialResponse response = materialService.createUpload(file,
-                new MaterialCreateRequest(title, type, sessionId, topicId, chapterId, description, file.getOriginalFilename(), null),
+                new MaterialCreateRequest(title, type, courseId, sessionId, topicId, chapterId, description, file.getOriginalFilename(), null),
                 authenticatedUserProvider.currentUser());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response, "Material uploaded successfully"));
     }

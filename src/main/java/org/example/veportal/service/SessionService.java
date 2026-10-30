@@ -70,7 +70,7 @@ public class SessionService {
     @Transactional(readOnly = true)
     public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size, UserAccount currentUser) {
         Specification<ClassSession> spec = (root, query, cb) -> cb.conjunction();
-        if (currentUser != null && currentUser.getRole() != Role.ADMIN) {
+        if (currentUser != null && !currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA) {
             List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
             spec = spec.and((root, query, cb) -> courseIds.isEmpty()
@@ -132,7 +132,7 @@ public class SessionService {
     @Transactional
     public SessionResponse create(SessionCreateRequest request, UserAccount currentUser) {
         Course course;
-        if (request.courseId() == null && currentUser.getRole() != Role.ADMIN) {
+        if (request.courseId() == null && !currentUser.getRole().isCoordinator()) {
             Long assignedCourseId = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).findFirst()
                     .orElseThrow(() -> new org.example.veportal.exception.BusinessException(
@@ -145,7 +145,7 @@ public class SessionService {
                     : courseRepository.findById(request.courseId())
                         .orElseThrow(() -> NotFoundException.resource("Course", request.courseId()));
         }
-        if (currentUser.getRole() != Role.ADMIN
+        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
                 && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
             throw new org.example.veportal.exception.BusinessException("You are not assigned to this course");
         }

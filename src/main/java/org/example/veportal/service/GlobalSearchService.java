@@ -46,7 +46,7 @@ public class GlobalSearchService {
         String term = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         if (term.length() < 2) return List.of();
         int limit = Math.max(1, Math.min(requestedLimit <= 0 ? DEFAULT_LIMIT : requestedLimit, MAX_LIMIT));
-        boolean admin = authenticatedUserProvider.currentUser().getRole() == Role.ADMIN;
+        boolean admin = authenticatedUserProvider.currentUser().getRole().isCoordinator();
         List<SearchResultResponse> matches = new ArrayList<>();
 
         for (UserAccount user : userRepository.findAll()) {

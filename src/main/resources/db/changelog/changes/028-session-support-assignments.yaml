@@ -1,0 +1,44 @@
+databaseChangeLog:
+  - changeSet:
+      id: 028-session-support-assignments
+      author: veportal
+      comment: Assign Teaching Assistants to individual class sessions.
+      changes:
+        - createTable:
+            tableName: session_support_assignments
+            columns:
+              - column: {name: id, type: bigint, autoIncrement: true, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: session_id, type: bigint, constraints: {nullable: false}}
+              - column: {name: ta_id, type: bigint, constraints: {nullable: false}}
+              - column: {name: assigned_by_id, type: bigint, constraints: {nullable: false}}
+              - column: {name: created_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: updated_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: created_by, type: varchar(120)}
+              - column: {name: updated_by, type: varchar(120)}
+        - addUniqueConstraint:
+            tableName: session_support_assignments
+            columnNames: session_id, ta_id
+            constraintName: uq_session_support_ta
+        - addForeignKeyConstraint:
+            baseTableName: session_support_assignments
+            baseColumnNames: session_id
+            referencedTableName: class_sessions
+            referencedColumnNames: id
+            constraintName: fk_session_support_session
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: session_support_assignments
+            baseColumnNames: ta_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_session_support_ta
+        - addForeignKeyConstraint:
+            baseTableName: session_support_assignments
+            baseColumnNames: assigned_by_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_session_support_assigner
+        - createIndex:
+            tableName: session_support_assignments
+            indexName: idx_session_support_session
+            columns: [{column: {name: session_id}}]

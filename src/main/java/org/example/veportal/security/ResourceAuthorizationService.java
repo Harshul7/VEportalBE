@@ -32,7 +32,7 @@ public class ResourceAuthorizationService {
 
     public boolean canAccessSession(Long sessionId) {
         UserAccount user = users.currentUser();
-        if (user.getRole() == Role.ADMIN) return true;
+        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
         return sessions.findById(sessionId)
                 .map(s -> courseFaculty.existsByCourseIdAndFacultyId(s.getCourse().getId(), user.getId()))
                 .orElse(false);
@@ -40,7 +40,7 @@ public class ResourceAuthorizationService {
 
     public boolean canAccessStudent(Long studentId, Long courseId) {
         UserAccount user = users.currentUser();
-        if (user.getRole() == Role.ADMIN) return true;
+        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
         if (courseId != null) {
             return courseFaculty.existsByCourseIdAndFacultyId(courseId, user.getId())
                     && courseStudents.existsByCourseIdAndStudentId(courseId, studentId);
@@ -51,7 +51,7 @@ public class ResourceAuthorizationService {
 
     public boolean canAccessMaterial(Long materialId) {
         UserAccount user = users.currentUser();
-        if (user.getRole() == Role.ADMIN) return true;
+        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
         return materials.findById(materialId)
                 .map(m -> courseFaculty.existsByCourseIdAndFacultyId(m.getCourse().getId(), user.getId()))
                 .orElse(false);

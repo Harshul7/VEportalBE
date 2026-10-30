@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 029-seed-ta-quick-access
+      author: veportal
+      comment: Seed a development Teaching Assistant account for the portal quick-access login.
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO users (email, password_hash, full_name, role, staff_code, department, status)
+              SELECT 'ta@iiit.ac.in', '$2a$10$Y0eGQ3rF9jVz1vBmSxOQ9uK7cT4nL5wA2dH8jR6pUyZsN3qXcE1fW', 'VE Teaching Assistant', 'TA', 'TA-VE-0001', 'Virtual Enterprise Programme', 'ACTIVE'
+              WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'ta@iiit.ac.in');
