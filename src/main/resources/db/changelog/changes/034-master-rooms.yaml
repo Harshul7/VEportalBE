@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: 034-master-rooms
+      author: ve-portal
+      comment: Add admin-managed classroom master data for session room selection.
+      changes:
+        - createTable:
+            tableName: rooms
+            columns:
+              - column: {name: id, type: bigint, autoIncrement: true, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: code, type: varchar(60), constraints: {nullable: false}}
+              - column: {name: active, type: boolean, defaultValueBoolean: true, constraints: {nullable: false}}
+              - column: {name: display_order, type: int, defaultValueNumeric: 0, constraints: {nullable: false}}
+              - column: {name: created_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: created_by, type: varchar(120)}
+              - column: {name: updated_at, type: datetime(6), defaultValueComputed: CURRENT_TIMESTAMP(6), constraints: {nullable: false}}
+              - column: {name: updated_by, type: varchar(120)}
+        - addUniqueConstraint:
+            tableName: rooms
+            columnNames: code
+            constraintName: uq_rooms_code
+        - sql:
+            sql: |
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-1', TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-1');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-2', TRUE, 2 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-2');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-3', TRUE, 3 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-3');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-4', TRUE, 4 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-4');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-5', TRUE, 5 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-5');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-6', TRUE, 6 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-6');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-7', TRUE, 7 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-7');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-8', TRUE, 8 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-8');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-9', TRUE, 9 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-9');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'SH-10', TRUE, 10 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'SH-10');
+              INSERT INTO rooms (code, active, display_order)
+              SELECT 'LH-1', TRUE, 11 WHERE NOT EXISTS (SELECT 1 FROM rooms WHERE code = 'LH-1');
+      rollback:
+        - dropTable:
+            tableName: rooms

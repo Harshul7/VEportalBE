@@ -12,8 +12,11 @@ import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.entity.UserAccount;
+import org.example.veportal.entity.SessionSupportAssignment;
+import java.time.LocalTime;
 import org.example.veportal.entity.Role;
 import org.example.veportal.exception.NotFoundException;
+import org.example.veportal.exception.BusinessException;
 import org.example.veportal.mapper.SessionMapper;
 import org.example.veportal.repository.AttendanceRecordRepository;
 import org.example.veportal.repository.ClassSessionRepository;
@@ -21,6 +24,7 @@ import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.TeachingLogRepository;
+import org.example.veportal.repository.RoomRepository;
 import org.example.veportal.util.Labels;
 import org.example.veportal.util.Percent;
 import org.springframework.data.domain.Page;
@@ -43,6 +47,7 @@ public class SessionService {
     private final CourseRepository courseRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final SessionMapper sessionMapper;
+    private final RoomRepository roomRepository;
 
     public SessionService(ClassSessionRepository sessionRepository,
                           AttendanceRecordRepository attendanceRepository,
@@ -51,7 +56,8 @@ public class SessionService {
                           CurrentCourseProvider currentCourseProvider,
                           CourseRepository courseRepository,
                           CourseFacultyRepository courseFacultyRepository,
-                          SessionMapper sessionMapper) {
+                          SessionMapper sessionMapper,
+                          RoomRepository roomRepository) {
         this.sessionRepository = sessionRepository;
         this.attendanceRepository = attendanceRepository;
         this.materialRepository = materialRepository;
@@ -60,6 +66,7 @@ public class SessionService {
         this.courseRepository = courseRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.sessionMapper = sessionMapper;
+        this.roomRepository = roomRepository;
     }
 
     @Transactional(readOnly = true)
@@ -70,7 +77,18 @@ public class SessionService {
     @Transactional(readOnly = true)
     public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size, UserAccount currentUser) {
         Specification<ClassSession> spec = (root, query, cb) -> cb.conjunction();
-        if (currentUser != null && !currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA) {
+        if (currentUser != null && currentUser.getRole() == Role.TA) {
+            spec = spec.and((root, query, cb) -> {
+                var subquery = query.subquery(Long.class);
+                var assignment = subquery.from(SessionSupportAssignment.class);
+                subquery.select(cb.literal(1L));
+                subquery.where(
+                        cb.equal(assignment.get("session").get("id"), root.get("id")),
+                        cb.equal(assignment.get("teachingAssistant").get("id"), currentUser.getId())
+                );
+                return cb.exists(subquery);
+            });
+        } else if (currentUser != null && !currentUser.getRole().isCoordinator()) {
             List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
             spec = spec.and((root, query, cb) -> courseIds.isEmpty()
@@ -131,6 +149,11 @@ public class SessionService {
 
     @Transactional
     public SessionResponse create(SessionCreateRequest request, UserAccount currentUser) {
+        if (currentUser.getRole() == Role.TA) {
+            throw new org.example.veportal.exception.BusinessException(
+                    "Teaching Assistants support sessions but cannot create them");
+        }
+        validateTimeRange(request.startTime(), request.endTime());
         Course course;
         if (request.courseId() == null && !currentUser.getRole().isCoordinator()) {
             Long assignedCourseId = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
@@ -161,11 +184,31 @@ public class SessionService {
         session.setSessionDate(java.time.LocalDate.parse(request.date()));
         session.setStartTime(request.startTime());
         session.setEndTime(request.endTime());
-        session.setRoom(request.room());
+        String room = request.room() == null || request.room().isBlank() ? "SH-1" : request.room().trim();
+        validateRoom(room);
+        session.setRoom(room);
         session.setFaculty(currentUser);
         session.setStatus(Labels.toSessionStatus(request.status()));
         ClassSession saved = sessionRepository.save(session);
         return sessionMapper.toResponse(saved);
+    }
+
+    private void validateTimeRange(String startTime, String endTime) {
+        try {
+            if (!startTime.matches("\\d{2}:\\d{2}") || !endTime.matches("\\d{2}:\\d{2}")) {
+                throw new org.example.veportal.exception.BusinessException("Times must be valid 24-hour values in HH:mm format");
+            }
+            if (!LocalTime.parse(endTime).isAfter(LocalTime.parse(startTime))) {
+                throw new org.example.veportal.exception.BusinessException("End time must be later than start time");
+            }
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new org.example.veportal.exception.BusinessException("Times must be valid 24-hour values in HH:mm format");
+        }
+    }
+
+    private void validateRoom(String room) {
+        roomRepository.findByCodeIgnoreCase(room).filter(org.example.veportal.entity.Room::isActive)
+                .orElseThrow(() -> new BusinessException("Select an active room from master data"));
     }
 
     public ClassSession requireSession(Long sessionId) {

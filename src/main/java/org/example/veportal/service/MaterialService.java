@@ -78,7 +78,7 @@ public class MaterialService {
     @Transactional(readOnly = true)
     public PagedResult<MaterialResponse> list(String search, String type, String sessionId, String chapterId, int page, int size, UserAccount currentUser) {
         Specification<CourseMaterial> spec = (root, query, cb) -> cb.conjunction();
-        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA) {
+        if (!currentUser.getRole().isCoordinator()) {
             var courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
             spec = spec.and((root, query, cb) -> courseIds.isEmpty()
@@ -152,12 +152,12 @@ public class MaterialService {
             session = sessionRepository.findById(parsedSessionId)
                     .orElseThrow(() -> NotFoundException.resource("Session", request.sessionId()));
             course = session.getCourse();
-            if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
+            if (!currentUser.getRole().isCoordinator()
                     && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
                 throw new BusinessException("You are not assigned to this course");
             }
         }
-        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
+        if (!currentUser.getRole().isCoordinator()
                 && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
             throw new BusinessException("You are not assigned to this course");
         }

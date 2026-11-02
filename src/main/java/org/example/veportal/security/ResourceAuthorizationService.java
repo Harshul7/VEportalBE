@@ -6,6 +6,7 @@ import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
+import org.example.veportal.repository.SessionSupportAssignmentRepository;
 import org.springframework.stereotype.Component;
 
 /** Central resource-level authorization used by method security expressions. */
@@ -17,22 +18,28 @@ public class ResourceAuthorizationService {
     private final CourseFacultyRepository courseFaculty;
     private final CourseStudentRepository courseStudents;
     private final CourseMaterialRepository materials;
+    private final SessionSupportAssignmentRepository supportAssignments;
 
     public ResourceAuthorizationService(AuthenticatedUserProvider users,
                                         ClassSessionRepository sessions,
                                         CourseFacultyRepository courseFaculty,
                                         CourseStudentRepository courseStudents,
-                                        CourseMaterialRepository materials) {
+                                        CourseMaterialRepository materials,
+                                        SessionSupportAssignmentRepository supportAssignments) {
         this.users = users;
         this.sessions = sessions;
         this.courseFaculty = courseFaculty;
         this.courseStudents = courseStudents;
         this.materials = materials;
+        this.supportAssignments = supportAssignments;
     }
 
     public boolean canAccessSession(Long sessionId) {
         UserAccount user = users.currentUser();
-        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
+        if (user.getRole().isCoordinator()) return true;
+        if (user.getRole() == Role.TA) {
+            return supportAssignments.existsBySessionIdAndTeachingAssistantId(sessionId, user.getId());
+        }
         return sessions.findById(sessionId)
                 .map(s -> courseFaculty.existsByCourseIdAndFacultyId(s.getCourse().getId(), user.getId()))
                 .orElse(false);
@@ -40,7 +47,7 @@ public class ResourceAuthorizationService {
 
     public boolean canAccessStudent(Long studentId, Long courseId) {
         UserAccount user = users.currentUser();
-        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
+        if (user.getRole().isCoordinator()) return true;
         if (courseId != null) {
             return courseFaculty.existsByCourseIdAndFacultyId(courseId, user.getId())
                     && courseStudents.existsByCourseIdAndStudentId(courseId, studentId);
@@ -51,7 +58,7 @@ public class ResourceAuthorizationService {
 
     public boolean canAccessMaterial(Long materialId) {
         UserAccount user = users.currentUser();
-        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) return true;
+        if (user.getRole().isCoordinator()) return true;
         return materials.findById(materialId)
                 .map(m -> courseFaculty.existsByCourseIdAndFacultyId(m.getCourse().getId(), user.getId()))
                 .orElse(false);

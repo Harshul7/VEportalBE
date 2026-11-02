@@ -23,6 +23,7 @@ import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.entity.MasterChapterTemplate;
 import org.example.veportal.entity.MasterCourseTemplate;
+import org.example.veportal.entity.Room;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.BranchRepository;
@@ -38,6 +39,7 @@ import org.example.veportal.repository.UserAccountRepository;
 import org.example.veportal.repository.TeachingLogRepository;
 import org.example.veportal.repository.MasterChapterTemplateRepository;
 import org.example.veportal.repository.MasterCourseTemplateRepository;
+import org.example.veportal.repository.RoomRepository;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.service.MailService;
 import org.example.veportal.service.AuthService;
@@ -89,6 +91,7 @@ public class AdminController {
     private final TeachingLogRepository teachingLogRepository;
     private final MasterCourseTemplateRepository masterCourseTemplateRepository;
     private final MasterChapterTemplateRepository masterChapterTemplateRepository;
+    private final RoomRepository roomRepository;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
@@ -106,7 +109,8 @@ public class AdminController {
                            AuthService authService,
                            TeachingLogRepository teachingLogRepository,
                            MasterCourseTemplateRepository masterCourseTemplateRepository,
-                           MasterChapterTemplateRepository masterChapterTemplateRepository) {
+                           MasterChapterTemplateRepository masterChapterTemplateRepository,
+                           RoomRepository roomRepository) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -124,6 +128,7 @@ public class AdminController {
         this.teachingLogRepository = teachingLogRepository;
         this.masterCourseTemplateRepository = masterCourseTemplateRepository;
         this.masterChapterTemplateRepository = masterChapterTemplateRepository;
+        this.roomRepository = roomRepository;
     }
 
     @GetMapping("/dashboard")
@@ -597,6 +602,38 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(result, "Master curriculum retrieved"));
     }
 
+    @GetMapping("/master-data/rooms")
+    public ResponseEntity<ApiResponse<List<RoomItem>>> masterRooms() {
+        List<RoomItem> rooms = roomRepository.findAllByOrderByDisplayOrderAscCodeAsc().stream()
+                .map(this::toRoomItem).toList();
+        return ResponseEntity.ok(ApiResponse.success(rooms, "Master rooms retrieved"));
+    }
+
+    @PostMapping("/master-data/rooms")
+    public ResponseEntity<ApiResponse<RoomItem>> createMasterRoom(@RequestBody CreateRoomRequest request) {
+        if (request.code() == null || request.code().isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("Room code is required"));
+        }
+        String code = request.code().trim().toUpperCase(Locale.ROOT);
+        if (roomRepository.findByCodeIgnoreCase(code).isPresent()) {
+            return ResponseEntity.ok(ApiResponse.error("A room with code " + code + " already exists"));
+        }
+        Room room = new Room();
+        room.setCode(code);
+        room.setDisplayOrder(request.displayOrder() == null ? (int) roomRepository.count() + 1 : request.displayOrder());
+        room.setActive(true);
+        return ResponseEntity.ok(ApiResponse.success(toRoomItem(roomRepository.save(room)), "Master room added"));
+    }
+
+    @DeleteMapping("/master-data/rooms/{roomId}")
+    public ResponseEntity<ApiResponse<Object>> archiveMasterRoom(@PathVariable Long roomId) {
+        Room room = roomRepository.findById(roomId).orElse(null);
+        if (room == null) return ResponseEntity.ok(ApiResponse.error("Room not found"));
+        room.setActive(false);
+        roomRepository.save(room);
+        return ResponseEntity.ok(ApiResponse.success(null, "Master room archived"));
+    }
+
     @PostMapping("/master-data/courses/{templateId}/chapters")
     public ResponseEntity<ApiResponse<MasterChapterItem>> createMasterChapter(@PathVariable Long templateId,
                                                                                 @RequestBody CreateMasterChapterRequest request) {
@@ -858,6 +895,11 @@ public class AdminController {
         );
     }
 
+    private RoomItem toRoomItem(Room room) {
+        return new RoomItem(room.getId(), room.getCode(), room.isActive(), room.getDisplayOrder(),
+                room.getCreatedAt() == null ? "" : room.getCreatedAt().toString());
+    }
+
     private int nameYearStart(String name) {
         try {
             return Integer.parseInt(name.trim().substring(0, 4));
@@ -986,6 +1028,7 @@ public class AdminController {
     ) {}
 
     public record BranchItem(long id, String code, String name, boolean active, String createdAt) {}
+    public record RoomItem(long id, String code, boolean active, int displayOrder, String createdAt) {}
 
     public record AcademicYearItem(long id, String name, int startYear, int endYear,
                                    boolean current, boolean active, String createdAt) {}
@@ -1009,6 +1052,7 @@ public class AdminController {
     public record FacultyStatusRequest(boolean active) {}
 
     public record CreateBranchRequest(String code, String name) {}
+    public record CreateRoomRequest(String code, Integer displayOrder) {}
 
     public record CreateAcademicYearRequest(String name, Integer startYear, Integer endYear) {}
 

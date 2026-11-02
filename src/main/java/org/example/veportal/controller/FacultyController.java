@@ -1,6 +1,7 @@
 package org.example.veportal.controller;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -14,11 +15,13 @@ import org.example.veportal.entity.Course;
 import org.example.veportal.entity.CourseFaculty;
 import org.example.veportal.entity.CourseMaterial;
 import org.example.veportal.entity.Role;
+import org.example.veportal.entity.Room;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.entity.Student;
 import org.example.veportal.entity.Topic;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.NotFoundException;
+import org.example.veportal.exception.BusinessException;
 import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.BranchRepository;
 import org.example.veportal.repository.AttendanceRecordRepository;
@@ -30,6 +33,7 @@ import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseStudentRepository;
 import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
+import org.example.veportal.repository.RoomRepository;
 import org.example.veportal.security.AuthenticatedUserProvider;
 import org.example.veportal.service.SessionService;
 import org.springframework.http.ResponseEntity;
@@ -58,6 +62,7 @@ public class FacultyController {
     private final AcademicYearRepository academicYearRepository;
     private final BranchRepository branchRepository;
     private final TopicRepository topicRepository;
+    private final RoomRepository roomRepository;
 
     public FacultyController(AuthenticatedUserProvider authenticatedUserProvider,
                              CourseRepository courseRepository,
@@ -71,7 +76,8 @@ public class FacultyController {
                              CourseStudentRepository courseStudentRepository,
                              AcademicYearRepository academicYearRepository,
                              TopicRepository topicRepository,
-                             BranchRepository branchRepository) {
+                             BranchRepository branchRepository,
+                             RoomRepository roomRepository) {
         this.authenticatedUserProvider = authenticatedUserProvider;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -85,10 +91,11 @@ public class FacultyController {
         this.academicYearRepository = academicYearRepository;
         this.topicRepository = topicRepository;
         this.branchRepository = branchRepository;
+        this.roomRepository = roomRepository;
     }
 
     private List<Course> coursesForCurrentUser(UserAccount currentUser) {
-        if (currentUser.getRole().isCoordinator() || currentUser.getRole() == Role.TA) {
+        if (currentUser.getRole().isCoordinator()) {
             return courseRepository.findAll();
         }
         List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId())
@@ -100,7 +107,7 @@ public class FacultyController {
     }
 
     private boolean canAccessCourse(UserAccount user, Long courseId) {
-        if (user.getRole().isCoordinator() || user.getRole() == Role.TA) {
+        if (user.getRole().isCoordinator()) {
             return true;
         }
         return courseFacultyRepository.existsByCourseIdAndFacultyId(courseId, user.getId());
@@ -139,6 +146,13 @@ public class FacultyController {
                 currentYear
         );
         return ResponseEntity.ok(ApiResponse.success(stats, "Faculty dashboard stats retrieved"));
+    }
+
+    @GetMapping("/rooms")
+    public ResponseEntity<ApiResponse<List<String>>> rooms() {
+        return ResponseEntity.ok(ApiResponse.success(
+                roomRepository.findByActiveTrueOrderByDisplayOrderAscCodeAsc().stream().map(Room::getCode).toList(),
+                "Rooms retrieved"));
     }
 
     @GetMapping("/courses")
@@ -329,29 +343,46 @@ public class FacultyController {
         if (!canAccessCourse(currentUser, course.getId())) {
             return ResponseEntity.status(403).body(ApiResponse.error("Course not accessible"));
         }
+        String startTime = body.startTime() == null || body.startTime().isBlank() ? "10:00" : body.startTime();
+        String endTime = body.endTime() == null || body.endTime().isBlank() ? "11:30" : body.endTime();
+        validateTimeRange(startTime, endTime);
+        if (body.sessionDate() == null || body.sessionDate().isBlank()) {
+            throw new BusinessException("Session date is required");
+        }
+        LocalDate sessionDate;
+        try {
+            sessionDate = LocalDate.parse(body.sessionDate());
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new BusinessException("Session date must be in YYYY-MM-DD format");
+        }
 
         ClassSession session = new ClassSession();
         session.setCourse(course);
         session.setSessionNumber(sessionRepository.findMaxSessionNumber(course.getId()) + 1);
         if (body.chapterId() != null) {
-            chapterRepository.findById(body.chapterId())
+            Chapter chapter = chapterRepository.findById(body.chapterId())
                     .filter(ch -> ch.getCourse().getId().equals(course.getId()))
                     .filter(ch -> !"ARCHIVED".equalsIgnoreCase(ch.getStatus()))
-                    .ifPresent(session::setChapter);
+                    .orElseThrow(() -> new BusinessException("Selected chapter is invalid for this course"));
+            session.setChapter(chapter);
         }
         if (body.topicId() != null) {
-            topicRepository.findById(body.topicId())
-                    .filter(topic -> body.chapterId() == null
-                            || topic.getChapter().getId().equals(body.chapterId()))
-                    .ifPresent(session::setTopicEntity);
+            Topic topic = topicRepository.findById(body.topicId())
+                    .filter(candidate -> body.chapterId() == null
+                            || candidate.getChapter().getId().equals(body.chapterId()))
+                    .orElseThrow(() -> new BusinessException("Selected topic is invalid for this chapter"));
+            session.setTopicEntity(topic);
         }
         session.setTopic(body.topic() == null || body.topic().isBlank()
-                ? "Class Session on " + (body.sessionDate() == null ? LocalDate.now() : LocalDate.parse(body.sessionDate()))
+                ? "Class Session on " + sessionDate
                 : body.topic().trim());
-        session.setSessionDate(LocalDate.parse(body.sessionDate()));
-        session.setStartTime(body.startTime() == null || body.startTime().isBlank() ? "10:00" : body.startTime());
-        session.setEndTime(body.endTime() == null || body.endTime().isBlank() ? "11:30" : body.endTime());
-        session.setRoom(body.room() == null || body.room().isBlank() ? "LH-1" : body.room());
+        session.setSessionDate(sessionDate);
+        session.setStartTime(startTime);
+        session.setEndTime(endTime);
+        String room = body.room() == null || body.room().isBlank() ? "SH-1" : body.room().trim();
+        roomRepository.findByCodeIgnoreCase(room).filter(Room::isActive)
+                .orElseThrow(() -> new BusinessException("Select an active room from master data"));
+        session.setRoom(room);
         session.setFaculty(currentUser);
         session.setStatus(SessionStatus.UPCOMING);
         ClassSession saved = sessionRepository.save(session);
@@ -377,6 +408,22 @@ public class FacultyController {
                 saved.getCreatedAt().toString()
         );
         return ResponseEntity.ok(ApiResponse.success(item, "Class session created"));
+    }
+
+    private void validateTimeRange(String startTime, String endTime) {
+        if (startTime == null || endTime == null || startTime.isBlank() || endTime.isBlank()) {
+            throw new BusinessException("Start and end time are required");
+        }
+        if (!startTime.matches("\\d{2}:\\d{2}") || !endTime.matches("\\d{2}:\\d{2}")) {
+            throw new BusinessException("Times must be valid 24-hour values in HH:mm format");
+        }
+        try {
+            if (!LocalTime.parse(endTime).isAfter(LocalTime.parse(startTime))) {
+                throw new BusinessException("End time must be later than start time");
+            }
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new BusinessException("Times must be valid 24-hour values in HH:mm format");
+        }
     }
 
     private ChapterItem toChapterItem(Chapter ch) {
