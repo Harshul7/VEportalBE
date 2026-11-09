@@ -30,6 +30,9 @@ public class ActivityLog extends BaseEntity {
     @Column(name = "href", length = 255)
     private String href;
 
+    @Column(name = "group_name", length = 150)
+    private String groupName;
+
     public UserAccount getUser() {
         return user;
     }
@@ -69,4 +72,7 @@ public class ActivityLog extends BaseEntity {
     public void setHref(String href) {
         this.href = href;
     }
+
+    public String getGroupName() { return groupName; }
+    public void setGroupName(String groupName) { this.groupName = groupName; }
 }

@@ -23,9 +23,15 @@ public class AdminActivityController {
     public ResponseEntity<ApiResponse<java.util.List<AdminActivityResponse>>> list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String kind,
+            @RequestParam(required = false) String groupName,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        PagedResult<AdminActivityResponse> result = activityService.list(search, kind, page, size);
+        PagedResult<AdminActivityResponse> result = activityService.list(search, kind, groupName, page, size);
         return ResponseEntity.ok(ApiResponse.success(result.content(), "Activity retrieved", result.pagination()));
+    }
+
+    @GetMapping("/groups")
+    public ResponseEntity<ApiResponse<java.util.List<String>>> groups() {
+        return ResponseEntity.ok(ApiResponse.success(activityService.groups(), "Activity groups retrieved"));
     }
 }

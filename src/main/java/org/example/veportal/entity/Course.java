@@ -35,6 +35,9 @@ public class Course extends BaseEntity {
     @Column(name = "summary", length = 2000)
     private String summary;
 
+    @Column(name = "group_name", length = 150)
+    private String groupName;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "faculty_id")
     private UserAccount faculty;
@@ -87,6 +90,9 @@ public class Course extends BaseEntity {
     public void setSummary(String summary) {
         this.summary = summary;
     }
+
+    public String getGroupName() { return groupName; }
+    public void setGroupName(String groupName) { this.groupName = groupName; }
 
     public UserAccount getFaculty() {
         return faculty;

@@ -22,14 +22,16 @@ public class AdminActivityService {
     public AdminActivityService(ActivityLogRepository repository) { this.repository = repository; }
 
     @Transactional(readOnly = true)
-    public PagedResult<AdminActivityResponse> list(String search, String kind, int page, int size) {
+    public PagedResult<AdminActivityResponse> list(String search, String kind, String groupName, int page, int size) {
         int safePage = Math.max(0, page);
         int safeSize = Math.min(Math.max(1, size), 100);
         String term = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
         ActivityKind requestedKind = parseKind(kind);
+        String requestedGroup = groupName == null ? "" : groupName.trim();
         List<ActivityLog> all = repository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
         List<AdminActivityResponse> filtered = all.stream()
                 .filter(item -> requestedKind == null || item.getKind() == requestedKind)
+                .filter(item -> requestedGroup.isBlank() || requestedGroup.equalsIgnoreCase(item.getGroupName()))
                 .filter(item -> term.isBlank() || contains(item.getTitle(), term) || contains(item.getContextText(), term)
                         || (item.getUser() != null && (contains(item.getUser().getFullName(), term) || contains(item.getUser().getEmail(), term))))
                 .map(this::toResponse)
@@ -41,8 +43,15 @@ public class AdminActivityService {
         return new PagedResult<>(content, new PageMeta(safePage, safeSize, filtered.size(), totalPages));
     }
 
+    @Transactional(readOnly = true)
+    public List<String> groups() {
+        return repository.findAll().stream().map(ActivityLog::getGroupName)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct().sorted(String.CASE_INSENSITIVE_ORDER).toList();
+    }
+
     private AdminActivityResponse toResponse(ActivityLog item) {
-        return new AdminActivityResponse(item.getId().toString(), item.getTitle(), item.getContextText() == null ? "" : item.getContextText(), RelativeTime.format(item.getCreatedAt()), Labels.of(item.getKind()), item.getHref(), item.getUser() == null ? null : item.getUser().getFullName(), item.getUser() == null ? null : item.getUser().getEmail());
+        return new AdminActivityResponse(item.getId().toString(), item.getTitle(), item.getContextText() == null ? "" : item.getContextText(), RelativeTime.format(item.getCreatedAt()), Labels.of(item.getKind()), item.getHref(), item.getGroupName(), item.getUser() == null ? null : item.getUser().getFullName(), item.getUser() == null ? null : item.getUser().getEmail());
     }
 
     private ActivityKind parseKind(String value) {

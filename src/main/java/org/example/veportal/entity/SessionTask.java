@@ -28,6 +28,12 @@ public class SessionTask extends BaseEntity {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    @Column(name = "end_date")
+    private LocalDate endDate;
+
     @Column(nullable = false, length = 20)
     private String status = "ACTIVE";
 
@@ -41,6 +47,10 @@ public class SessionTask extends BaseEntity {
     public void setDescription(String description) { this.description = description; }
     public LocalDate getDueDate() { return dueDate; }
     public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
+    public LocalDate getStartDate() { return startDate; }
+    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
+    public LocalDate getEndDate() { return endDate; }
+    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 }

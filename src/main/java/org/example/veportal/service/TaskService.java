@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.example.veportal.config.AppProperties;
@@ -40,7 +41,7 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public List<TaskResponse> list(Long sessionId) {
-        return taskRepository.findBySessionIdAndStatusOrderByDueDateAscIdAsc(sessionId, "ACTIVE")
+        return taskRepository.findBySessionIdAndStatusOrderByStartDateAscIdAsc(sessionId, "ACTIVE")
                 .stream().map(this::toResponse).toList();
     }
 
@@ -52,6 +53,7 @@ public class TaskService {
         task.setTaskType(normalizeType(request.taskType()));
         task.setDescription(request.description() == null ? null : request.description().trim());
         task.setDueDate(request.dueDate());
+        applyDates(task, request);
         return toResponse(taskRepository.save(task));
     }
 
@@ -62,6 +64,7 @@ public class TaskService {
         task.setTaskType(normalizeType(request.taskType()));
         task.setDescription(request.description() == null ? null : request.description().trim());
         task.setDueDate(request.dueDate());
+        applyDates(task, request);
         return toResponse(taskRepository.save(task));
     }
 
@@ -141,11 +144,23 @@ public class TaskService {
         return value;
     }
 
+    private void applyDates(SessionTask task, TaskCreateRequest request) {
+        LocalDate start = request.startDate();
+        LocalDate end = request.endDate();
+        if (start != null && end != null && end.isBefore(start)) {
+            throw new BusinessException("Task end date must be on or after the start date");
+        }
+        task.setStartDate(start);
+        task.setEndDate(end);
+        if (task.getDueDate() == null) task.setDueDate(end);
+    }
+
     private TaskResponse toResponse(SessionTask task) {
         List<TaskResponse.TaskDocumentResponse> documents = documentRepository.findByTaskIdOrderByUploadedAtDesc(task.getId())
                 .stream().map(d -> new TaskResponse.TaskDocumentResponse(d.getId(), d.getFileName(), d.getContentType(),
                         d.getSizeBytes(), d.getUploadedBy().getFullName(), d.getUploadedAt())).toList();
         return new TaskResponse(task.getId(), task.getSession().getId(), task.getTitle(), task.getTaskType(),
-                task.getDescription(), task.getDueDate(), task.getStatus(), task.getCreatedBy(), task.getCreatedAt(), documents);
+                task.getDescription(), task.getDueDate(), task.getStartDate(), task.getEndDate(), task.getStatus(),
+                task.getCreatedBy(), task.getCreatedAt(), documents);
     }
 }

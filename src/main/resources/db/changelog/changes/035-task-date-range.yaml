@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 035-task-date-range
+      author: veportal
+      comment: Add an optional start and end date to session tasks while retaining due_date for compatibility.
+      changes:
+        - addColumn:
+            tableName: session_tasks
+            columns:
+              - column: { name: start_date, type: date }
+              - column: { name: end_date, type: date }
+        - sql:
+            sql: UPDATE session_tasks SET end_date = due_date WHERE end_date IS NULL AND due_date IS NOT NULL

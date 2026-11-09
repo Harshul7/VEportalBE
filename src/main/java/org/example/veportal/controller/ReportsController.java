@@ -22,7 +22,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/reports")
-@PreAuthorize("@resourceAuthorization.canAccessStudent(#id, #courseId)")
 public class ReportsController {
     private final StudentRepository studentRepository;
     private final AttendanceRecordRepository attendanceRepository;
@@ -40,6 +39,7 @@ public class ReportsController {
     }
 
     @GetMapping("/students/{id}/performance")
+    @PreAuthorize("@resourceAuthorization.canAccessStudent(#id, #courseId)")
     public ResponseEntity<ApiResponse<StudentPerformanceReport>> studentPerformance(
             @PathVariable Long id,
             @RequestParam(name = "courseId", required = false) Long courseId) {
@@ -81,6 +81,39 @@ public class ReportsController {
                 participationSummary.entrySet().stream()
                         .map(e -> new ParticipationSummary(e.getKey(), e.getValue())).toList());
         return ResponseEntity.ok(ApiResponse.success(report, "Performance retrieved"));
+    }
+
+    @GetMapping("/students/{id}/ve-history")
+    @PreAuthorize("@resourceAuthorization.canAccessStudent(#id, null)")
+    public ResponseEntity<ApiResponse<List<VeCourseHistory>>> veHistory(@PathVariable Long id) {
+        if (studentRepository.findById(id).isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.error("Student not found"));
+        }
+        Map<Long, VeCourseHistoryBuilder> grouped = new LinkedHashMap<>();
+        attendanceRepository.findStudentHistory(id, null).forEach(record -> {
+            var course = record.getSession().getCourse();
+            var builder = grouped.computeIfAbsent(course.getId(), ignored -> new VeCourseHistoryBuilder(
+                    course.getId(), course.getCode(), course.getName(), course.getCourseType(),
+                    course.getAcademicYear() == null ? "" : course.getAcademicYear().getName()));
+            builder.total++;
+            if (record.getStatus().name().equals("PRESENT")) builder.present++;
+            if (builder.firstSessionDate == null || record.getSession().getSessionDate().isBefore(builder.firstSessionDate)) {
+                builder.firstSessionDate = record.getSession().getSessionDate();
+            }
+            if (builder.lastSessionDate == null || record.getSession().getSessionDate().isAfter(builder.lastSessionDate)) {
+                builder.lastSessionDate = record.getSession().getSessionDate();
+            }
+        });
+        participationRepository.findStudentHistory(id, null).forEach(record -> {
+            var courseId = record.getSession().getCourse().getId();
+            var builder = grouped.get(courseId);
+            if (builder != null) {
+                builder.participationRecords++;
+                if (record.getLevel() == ParticipationLevel.HIGH) builder.highParticipationRecords++;
+            }
+        });
+        List<VeCourseHistory> result = grouped.values().stream().map(VeCourseHistoryBuilder::toResponse).toList();
+        return ResponseEntity.ok(ApiResponse.success(result, "VE course history retrieved"));
     }
 
     @GetMapping(value = "/students/{id}/performance/export", produces = "text/csv")
@@ -138,6 +171,42 @@ public class ReportsController {
         if (value == null) return "";
         return "\"" + value.replace("\"", "\"\"") + "\"";
     }
+
+    private static final class VeCourseHistoryBuilder {
+        private final Long courseId;
+        private final String courseCode;
+        private final String courseName;
+        private final String courseType;
+        private final String academicYear;
+        private int total;
+        private int present;
+        private java.time.LocalDate firstSessionDate;
+        private java.time.LocalDate lastSessionDate;
+        private int participationRecords;
+        private int highParticipationRecords;
+
+        private VeCourseHistoryBuilder(Long courseId, String courseCode, String courseName, String courseType,
+                                       String academicYear) {
+            this.courseId = courseId;
+            this.courseCode = courseCode;
+            this.courseName = courseName;
+            this.courseType = courseType;
+            this.academicYear = academicYear;
+        }
+
+        private VeCourseHistory toResponse() {
+            double percentage = total == 0 ? 0.0 : present * 100.0 / total;
+            return new VeCourseHistory(courseId, courseCode, courseName, courseType, academicYear,
+                    firstSessionDate, lastSessionDate, total, present, total - present, percentage,
+                    participationRecords, highParticipationRecords);
+        }
+    }
+
+    public record VeCourseHistory(Long courseId, String courseCode, String courseName, String courseType,
+                                  String academicYear, java.time.LocalDate firstSessionDate,
+                                  java.time.LocalDate lastSessionDate, int totalClasses, int presentClasses,
+                                  int absentClasses, double attendancePercentage, int participationRecords,
+                                  int highParticipationRecords) {}
 
     private record ChapterSummary(long chapterId, int chapterNumber, String chapterTitle,
                                   int totalClasses, int presentClasses) {}

@@ -7,6 +7,7 @@ public record AdminActivityResponse(
         String time,
         String kind,
         String href,
+        String groupName,
         String actorName,
         String actorEmail
 ) {

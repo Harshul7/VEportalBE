@@ -23,12 +23,19 @@ public class ActivityService {
     @Transactional
     public void record(UserAccount actor, org.example.veportal.entity.ActivityKind kind,
                        String title, String contextText, String href) {
+        record(actor, kind, title, contextText, href, null);
+    }
+
+    @Transactional
+    public void record(UserAccount actor, org.example.veportal.entity.ActivityKind kind,
+                       String title, String contextText, String href, String groupName) {
         ActivityLog log = new ActivityLog();
         log.setUser(actor);
         log.setKind(kind);
         log.setTitle(title);
         log.setContextText(contextText);
         log.setHref(href);
+        log.setGroupName(groupName == null || groupName.isBlank() ? null : groupName.trim());
         activityLogRepository.save(log);
     }
 

@@ -67,3 +67,9 @@ databaseChangeLog:
       file: db/changelog/changes/033-fix-hv-session-chapter-mapping.yaml
   - include:
       file: db/changelog/changes/034-master-rooms.yaml
+  - include:
+      file: db/changelog/changes/035-task-date-range.yaml
+  - include:
+      file: db/changelog/changes/036-activity-groups.yaml
+  - include:
+      file: db/changelog/changes/037-course-groups.yaml

@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 037-course-groups
+      author: codex
+      changes:
+        - addColumn:
+            tableName: courses
+            columns:
+              - column:
+                  name: group_name
+                  type: varchar(150)
+        - sql:
+            sql: UPDATE courses SET group_name = name WHERE group_name IS NULL OR TRIM(group_name) = ''
+        - createIndex:
+            tableName: courses
+            indexName: idx_courses_group_name
+            columns:
+              - column:
+                  name: group_name

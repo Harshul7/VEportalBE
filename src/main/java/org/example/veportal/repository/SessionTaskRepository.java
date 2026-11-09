@@ -5,5 +5,5 @@ import org.example.veportal.entity.SessionTask;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SessionTaskRepository extends JpaRepository<SessionTask, Long> {
-    List<SessionTask> findBySessionIdAndStatusOrderByDueDateAscIdAsc(Long sessionId, String status);
+    List<SessionTask> findBySessionIdAndStatusOrderByStartDateAscIdAsc(Long sessionId, String status);
 }

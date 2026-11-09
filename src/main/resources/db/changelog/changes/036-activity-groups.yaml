@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 036-activity-groups
+      author: veportal
+      comment: Store the course/group label associated with activity records.
+      changes:
+        - addColumn:
+            tableName: activity_log
+            columns:
+              - column: { name: group_name, type: varchar(150) }
+        - createIndex:
+            tableName: activity_log
+            indexName: idx_activity_group_name
+            columns:
+              - column: { name: group_name }
+        - sql:
+            sql: |
+              UPDATE activity_log a
+              JOIN class_sessions s ON a.href LIKE CONCAT('%session=', s.id)
+              JOIN courses c ON c.id = s.course_id
+              SET a.group_name = c.name
+              WHERE a.group_name IS NULL

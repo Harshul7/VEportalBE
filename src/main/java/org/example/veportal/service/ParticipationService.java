@@ -125,7 +125,7 @@ public class ParticipationService {
                 org.example.veportal.entity.ActivityKind.PARTICIPATION,
                 "Participation updated for Session " + session.getSessionNumber(),
                 truncate(session.getTopic(), 255),
-                "/participation?session=" + session.getId());
+                "/participation?session=" + session.getId(), session.getCourse().getGroupName() == null ? session.getCourse().getName() : session.getCourse().getGroupName());
 
         List<ParticipationRecord> allRecords = participationRepository.findWithStudentBySessionId(session.getId());
         return allRecords.stream().map(academicMapper::toResponse).toList();

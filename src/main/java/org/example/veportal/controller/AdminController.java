@@ -387,6 +387,11 @@ public class AdminController {
         if (email == null || email.isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("Email is required"));
         }
+        String instituteRole = request.department() == null ? "" : request.department().trim();
+        if (!List.of("Faculty", "Staff (Full Time)", "Staff (Part-time)", "PhD Student")
+                .contains(instituteRole)) {
+            return ResponseEntity.ok(ApiResponse.error("Select a valid institute role"));
+        }
         String employeeId = request.employeeId() == null ? null : request.employeeId().trim();
         if (userAccountRepository.existsByEmailIgnoreCase(email)) {
             return ResponseEntity.ok(ApiResponse.error("A user with email " + email + " already exists"));
@@ -399,8 +404,8 @@ public class AdminController {
         user.setFullName(request.name() == null ? "" : request.name().trim());
         user.setStaffCode(employeeId == null || employeeId.isBlank()
                 ? generatedStaffCode() : request.employeeId().trim());
-        user.setDepartment(request.department() == null ? "" : request.department().trim());
-        user.setRole(Role.GROUP_MENTOR);
+        user.setDepartment(instituteRole);
+        user.setRole("TA".equalsIgnoreCase(request.role()) ? Role.TA : Role.GROUP_MENTOR);
         user.setStatus(AccountStatus.ACTIVE);
         user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
@@ -556,9 +561,8 @@ public class AdminController {
             return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
         }
         if (request.name() == null || request.name().isBlank()
-                || request.code() == null || request.code().isBlank()
-                || request.semester() == null || request.semester() < 1) {
-            return ResponseEntity.ok(ApiResponse.error("Course name, code and semester are required"));
+                || request.code() == null || request.code().isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("Course name and code are required"));
         }
         String code = request.code() == null || request.code().isBlank()
                 ? "VE-" + System.currentTimeMillis() : request.code().trim();
@@ -570,7 +574,9 @@ public class AdminController {
         course.setName(request.name().trim());
         course.setCourseType(request.courseType() == null ? "VE1" : request.courseType().trim());
         course.setTerm(course.getCourseType());
-        course.setSemester(request.semester());
+        course.setSemester(request.semester() == null || request.semester() < 1 ? 1 : request.semester());
+        course.setGroupName(request.groupName() == null || request.groupName().isBlank()
+                ? course.getName().trim() : request.groupName().trim());
         course.setStatus("ACTIVE");
         course.setAcademicYear(academicYear);
         Course saved = courseRepository.save(course);
@@ -1057,7 +1063,7 @@ public class AdminController {
     public record CreateAcademicYearRequest(String name, Integer startYear, Integer endYear) {}
 
     public record CreateCourseRequest(String name, String code, String courseType, Integer semester,
-                                      Long academicYearId) {}
+                                      Long academicYearId, String groupName) {}
 
     public record CreateChapterRequest(String title, String description) {}
     public record CreateMasterChapterRequest(String title, String description) {}

@@ -11,6 +11,8 @@ public record TaskResponse(
         String taskType,
         String description,
         LocalDate dueDate,
+        LocalDate startDate,
+        LocalDate endDate,
         String status,
         String createdBy,
         LocalDateTime createdAt,

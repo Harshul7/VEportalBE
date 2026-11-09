@@ -7,5 +7,7 @@ public record TaskCreateRequest(
         @NotBlank String title,
         @NotBlank String taskType,
         String description,
-        LocalDate dueDate
+        LocalDate dueDate,
+        LocalDate startDate,
+        LocalDate endDate
 ) {}
