@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface SessionTaskRepository extends JpaRepository<SessionTask, Long> {
     List<SessionTask> findBySessionIdAndStatusOrderByStartDateAscIdAsc(Long sessionId, String status);
+    List<SessionTask> findByStatusOrderByStartDateAscIdAsc(String status);
 }

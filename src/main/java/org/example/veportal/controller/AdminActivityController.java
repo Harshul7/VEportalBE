@@ -24,9 +24,13 @@ public class AdminActivityController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String kind,
             @RequestParam(required = false) String groupName,
+            @RequestParam(required = false) Long academicYearId,
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) String fromDate,
+            @RequestParam(required = false) String toDate,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        PagedResult<AdminActivityResponse> result = activityService.list(search, kind, groupName, page, size);
+        PagedResult<AdminActivityResponse> result = activityService.list(search, kind, groupName, academicYearId, courseId, fromDate, toDate, page, size);
         return ResponseEntity.ok(ApiResponse.success(result.content(), "Activity retrieved", result.pagination()));
     }
 

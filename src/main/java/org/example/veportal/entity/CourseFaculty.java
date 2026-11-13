@@ -24,6 +24,13 @@ public class CourseFaculty {
     @Column(name = "faculty_id", nullable = false)
     private Long facultyId;
 
+    @Column(name = "group_id")
+    private Long groupId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id", insertable = false, updatable = false)
+    private CourseGroup group;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id", insertable = false, updatable = false)
     private Course course;
@@ -43,6 +50,12 @@ public class CourseFaculty {
         this.facultyId = facultyId;
     }
 
+    public CourseFaculty(Long courseId, Long facultyId, Long groupId) {
+        this.courseId = courseId;
+        this.facultyId = facultyId;
+        this.groupId = groupId;
+    }
+
     public Long getCourseId() {
         return courseId;
     }
@@ -58,6 +71,11 @@ public class CourseFaculty {
     public void setFacultyId(Long facultyId) {
         this.facultyId = facultyId;
     }
+
+    public Long getGroupId() { return groupId; }
+    public void setGroupId(Long groupId) { this.groupId = groupId; }
+    public CourseGroup getGroup() { return group; }
+    public void setGroup(CourseGroup group) { this.group = group; }
 
     public Course getCourse() {
         return course;

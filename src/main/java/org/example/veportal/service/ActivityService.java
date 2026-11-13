@@ -1,6 +1,7 @@
 package org.example.veportal.service;
 
 import org.example.veportal.entity.ActivityLog;
+import org.example.veportal.entity.Course;
 import org.example.veportal.entity.Notification;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.repository.ActivityLogRepository;
@@ -29,6 +30,12 @@ public class ActivityService {
     @Transactional
     public void record(UserAccount actor, org.example.veportal.entity.ActivityKind kind,
                        String title, String contextText, String href, String groupName) {
+        record(actor, kind, title, contextText, href, groupName, null);
+    }
+
+    @Transactional
+    public void record(UserAccount actor, org.example.veportal.entity.ActivityKind kind,
+                       String title, String contextText, String href, String groupName, Course course) {
         ActivityLog log = new ActivityLog();
         log.setUser(actor);
         log.setKind(kind);
@@ -36,6 +43,7 @@ public class ActivityService {
         log.setContextText(contextText);
         log.setHref(href);
         log.setGroupName(groupName == null || groupName.isBlank() ? null : groupName.trim());
+        log.setCourse(course);
         activityLogRepository.save(log);
     }
 

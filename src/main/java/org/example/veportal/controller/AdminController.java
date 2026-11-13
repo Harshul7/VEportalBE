@@ -17,6 +17,7 @@ import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.Course;
 import org.example.veportal.entity.CourseFaculty;
 import org.example.veportal.entity.CourseStudent;
+import org.example.veportal.entity.CourseGroup;
 import org.example.veportal.entity.Role;
 import org.example.veportal.entity.Student;
 import org.example.veportal.entity.Topic;
@@ -33,6 +34,7 @@ import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseStudentRepository;
+import org.example.veportal.repository.CourseGroupRepository;
 import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
@@ -83,6 +85,7 @@ public class AdminController {
     private final ChapterRepository chapterRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final CourseStudentRepository courseStudentRepository;
+    private final CourseGroupRepository courseGroupRepository;
     private final StudentRepository studentRepository;
     private final TopicRepository topicRepository;
     private final PasswordEncoder passwordEncoder;
@@ -102,6 +105,7 @@ public class AdminController {
                            ChapterRepository chapterRepository,
                            CourseFacultyRepository courseFacultyRepository,
                            CourseStudentRepository courseStudentRepository,
+                           CourseGroupRepository courseGroupRepository,
                            StudentRepository studentRepository,
                            TopicRepository topicRepository,
                            PasswordEncoder passwordEncoder,
@@ -120,6 +124,7 @@ public class AdminController {
         this.chapterRepository = chapterRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.courseStudentRepository = courseStudentRepository;
+        this.courseGroupRepository = courseGroupRepository;
         this.studentRepository = studentRepository;
         this.topicRepository = topicRepository;
         this.passwordEncoder = passwordEncoder;
@@ -226,7 +231,9 @@ public class AdminController {
             if (!courseRepository.existsById(request.courseId())) {
                 return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
             }
-            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId()));
+            Long groupId = validGroupId(request.courseId(), request.groupId());
+            if (request.groupId() != null && groupId == null) return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
+            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId(), groupId));
         }
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, null), "Student created"));
     }
@@ -236,7 +243,8 @@ public class AdminController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(required = false) Long facultyId,
             @RequestParam(required = false) Long academicYearId,
-            @RequestParam(required = false) Long courseId) {
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) Long groupId) {
         if (file.isEmpty()) return ResponseEntity.ok(ApiResponse.error("Excel file is required"));
         UserAccount faculty = facultyId == null ? null : userAccountRepository.findById(facultyId).orElse(null);
         if (facultyId != null && (faculty == null || !faculty.getRole().isMentor())) {
@@ -277,7 +285,7 @@ public class AdminController {
                 if (faculty != null) student.setFaculty(faculty);
                 studentRepository.save(student);
                 if (courseId != null && courseRepository.existsById(courseId)) {
-                    courseStudentRepository.save(new CourseStudent(courseId, student.getId()));
+                    courseStudentRepository.save(new CourseStudent(courseId, student.getId(), validGroupId(courseId, groupId)));
                 }
                 imported++;
             }
@@ -328,7 +336,9 @@ public class AdminController {
         Student saved = studentRepository.save(s);
         if (request.courseId() != null && courseRepository.existsById(request.courseId())
                 && !courseStudentRepository.existsByCourseIdAndStudentId(request.courseId(), saved.getId())) {
-            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId()));
+            Long groupId = validGroupId(request.courseId(), request.groupId());
+            if (request.groupId() != null && groupId == null) return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
+            courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId(), groupId));
         }
         Double percent = attendancePercentages(List.of(saved)).get(saved.getId());
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, percent), "Student updated"));
@@ -414,7 +424,13 @@ public class AdminController {
             if (!courseRepository.existsById(request.courseId())) {
                 return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
             }
-            courseFacultyRepository.save(new CourseFaculty(request.courseId(), saved.getId()));
+            Long groupId = validGroupId(request.courseId(), request.groupId());
+            if (request.groupId() != null && groupId == null) return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
+            courseFacultyRepository.save(new CourseFaculty(request.courseId(), saved.getId(), groupId));
+            if (groupId != null) {
+                CourseGroup group = courseGroupRepository.findById(groupId).orElseThrow();
+                group.setMentor(saved); courseGroupRepository.save(group);
+            }
         }
         authService.issuePasswordSetup(saved);
         return ResponseEntity.ok(ApiResponse.success(
@@ -551,6 +567,43 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(courses, "Courses retrieved"));
     }
 
+    @GetMapping("/courses/{courseId}/groups")
+    public ResponseEntity<ApiResponse<List<CourseGroupItem>>> courseGroups(@PathVariable Long courseId) {
+        return ResponseEntity.ok(ApiResponse.success(courseGroupRepository.findByCourseIdOrderByNameAsc(courseId).stream().map(this::toCourseGroupItem).toList(), "Course groups retrieved"));
+    }
+
+    @PostMapping("/courses/{courseId}/groups")
+    public ResponseEntity<ApiResponse<CourseGroupItem>> createCourseGroup(@PathVariable Long courseId, @RequestBody CourseGroupRequest request) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Group name is required"));
+        if (courseGroupRepository.findByCourseIdAndNameIgnoreCase(courseId, name).isPresent()) return ResponseEntity.ok(ApiResponse.error("This group already exists for the course"));
+        CourseGroup group = new CourseGroup(); group.setCourse(course); group.setName(name);
+        if (request.mentorId() != null) {
+            UserAccount mentor = userAccountRepository.findById(request.mentorId()).orElse(null);
+            if (mentor == null || !mentor.getRole().isMentor()) return ResponseEntity.ok(ApiResponse.error("Selected mentor was not found"));
+            group.setMentor(mentor);
+        }
+        return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(courseGroupRepository.save(group)), "Group created"));
+    }
+
+    @PutMapping("/course-groups/{groupId}")
+    public ResponseEntity<ApiResponse<CourseGroupItem>> updateCourseGroup(@PathVariable Long groupId, @RequestBody CourseGroupRequest request) {
+        CourseGroup group = courseGroupRepository.findById(groupId).orElse(null);
+        if (group == null) return ResponseEntity.ok(ApiResponse.error("Group not found"));
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Group name is required"));
+        if (courseGroupRepository.findByCourseIdAndNameIgnoreCase(group.getCourse().getId(), name).filter(existing -> !existing.getId().equals(groupId)).isPresent()) return ResponseEntity.ok(ApiResponse.error("This group already exists for the course"));
+        group.setName(name);
+        if (request.mentorId() == null) group.setMentor(null); else {
+            UserAccount mentor = userAccountRepository.findById(request.mentorId()).orElse(null);
+            if (mentor == null || !mentor.getRole().isMentor()) return ResponseEntity.ok(ApiResponse.error("Selected mentor was not found"));
+            group.setMentor(mentor);
+        }
+        return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(courseGroupRepository.save(group)), "Group updated"));
+    }
+
     @PostMapping("/courses")
     public ResponseEntity<ApiResponse<CourseListItem>> createCourse(@RequestBody CreateCourseRequest request) {
         if (request.academicYearId() == null) {
@@ -580,6 +633,11 @@ public class AdminController {
         course.setStatus("ACTIVE");
         course.setAcademicYear(academicYear);
         Course saved = courseRepository.save(course);
+        List<String> requestedGroups = request.groups() == null ? List.of() : request.groups().stream().filter(java.util.Objects::nonNull).map(String::trim).filter(value -> !value.isBlank()).distinct().toList();
+        if (requestedGroups.isEmpty()) requestedGroups = List.of(course.getGroupName());
+        for (String groupName : requestedGroups) {
+            CourseGroup group = new CourseGroup(); group.setCourse(saved); group.setName(groupName); courseGroupRepository.save(group);
+        }
         masterCourseTemplateRepository.findByCode(course.getCourseType())
                 .filter(template -> template.getSemester().equals(course.getSemester()))
                 .ifPresent(template -> masterChapterTemplateRepository
@@ -829,6 +887,7 @@ public class AdminController {
     }
 
     private StudentListItem toStudentItem(Student s, Double attendancePercent) {
+        VeSummary ve = veSummary(s);
         return new StudentListItem(
                 s.getId(),
                 s.getStudentCode(),
@@ -839,8 +898,22 @@ public class AdminController {
                 s.getProgramme(),
                 1,
                 s.getStatus().name(),
-                attendancePercent == null ? 0.0 : attendancePercent
+                attendancePercent == null ? 0.0 : attendancePercent,
+                ve.passed(), ve.status(), ve.taken()
         );
+    }
+
+    private VeSummary veSummary(Student student) {
+        var records = attendanceRepository.findStudentHistory(student.getId(), null).stream()
+                .filter(record -> "VE1".equalsIgnoreCase(record.getSession().getCourse().getCourseType())
+                        || "VE1".equalsIgnoreCase(record.getSession().getCourse().getCode()))
+                .toList();
+        if (records.isEmpty()) return new VeSummary(false, "NOT_TAKEN", "");
+        long present = records.stream().filter(record -> "PRESENT".equals(record.getStatus().name())).count();
+        boolean passed = present * 100.0 / records.size() >= 75.0;
+        var first = records.stream().map(record -> record.getSession().getSessionDate()).min(java.time.LocalDate::compareTo).orElse(null);
+        String year = records.get(0).getSession().getCourse().getAcademicYear() == null ? "" : records.get(0).getSession().getCourse().getAcademicYear().getName();
+        return new VeSummary(passed, passed ? "PASS" : "FAIL", year + (first == null ? "" : " · " + first));
     }
 
     private FacultyListItem toFacultyItem(UserAccount u) {
@@ -899,6 +972,16 @@ public class AdminController {
                 y.getStatus() == AccountStatus.ACTIVE,
                 y.getCreatedAt() == null ? "" : y.getCreatedAt().toString()
         );
+    }
+
+    private CourseGroupItem toCourseGroupItem(CourseGroup group) {
+        UserAccount mentor = group.getMentor();
+        return new CourseGroupItem(group.getId(), group.getName(), mentor == null ? null : mentor.getId(), mentor == null ? null : mentor.getFullName(), mentor == null ? null : mentor.getEmail());
+    }
+
+    private Long validGroupId(Long courseId, Long groupId) {
+        if (groupId == null) return null;
+        return courseGroupRepository.findById(groupId).filter(group -> group.getCourse().getId().equals(courseId)).map(CourseGroup::getId).orElse(null);
     }
 
     private RoomItem toRoomItem(Room room) {
@@ -1004,8 +1087,11 @@ public class AdminController {
     public record StudentListItem(
             long id, String rollNumber, String name, String email,
             Long branchId, String branchName, String branchCode,
-            int semester, String status, double attendancePercentage
+            int semester, String status, double attendancePercentage, boolean vePassed,
+            String ve1Status, String ve1Taken
     ) {}
+
+    private record VeSummary(boolean passed, String status, String taken) {}
 
     public record FacultyListItem(
             long id, String facultyId, String name, String email,
@@ -1047,11 +1133,11 @@ public class AdminController {
 
     public record CreateStudentRequest(String rollNumber, String name, String email,
                                        Long branchId, Long academicYearId, Integer semester,
-                                       Long facultyId, Long courseId) {}
+                                       Long facultyId, Long courseId, Long groupId) {}
 
     public record StudentImportResult(int imported, int skipped, List<String> errors) {}
 
-    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId, String role) {}
+    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId, String role, Long groupId) {}
 
     public record AccountCreateRequest(String role, Boolean sendEmail) {}
 
@@ -1063,7 +1149,10 @@ public class AdminController {
     public record CreateAcademicYearRequest(String name, Integer startYear, Integer endYear) {}
 
     public record CreateCourseRequest(String name, String code, String courseType, Integer semester,
-                                      Long academicYearId, String groupName) {}
+                                      Long academicYearId, String groupName, List<String> groups) {}
+
+    public record CourseGroupRequest(String name, Long mentorId) {}
+    public record CourseGroupItem(long id, String name, Long mentorId, String mentorName, String mentorEmail) {}
 
     public record CreateChapterRequest(String title, String description) {}
     public record CreateMasterChapterRequest(String title, String description) {}

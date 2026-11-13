@@ -13,6 +13,7 @@ import org.example.veportal.entity.Chapter;
 import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
 import org.example.veportal.entity.CourseFaculty;
+import org.example.veportal.entity.CourseStudent;
 import org.example.veportal.entity.CourseMaterial;
 import org.example.veportal.entity.Role;
 import org.example.veportal.entity.Room;
@@ -277,6 +278,14 @@ public class FacultyController {
     }
 
     private List<Long> assignedStudentIds(UserAccount user) {
+        if (user.getRole().isCoordinator()) {
+            return studentRepository.findAll().stream().map(Student::getId).toList();
+        }
+        List<Long> groupIds = courseFacultyRepository.findByFacultyId(user.getId()).stream()
+                .map(CourseFaculty::getGroupId).filter(java.util.Objects::nonNull).toList();
+        if (!groupIds.isEmpty()) {
+            return courseStudentRepository.findByGroupIdIn(groupIds).stream().map(CourseStudent::getStudentId).distinct().toList();
+        }
         List<Long> courseIds = courseFacultyRepository.findByFacultyId(user.getId()).stream()
                 .map(CourseFaculty::getCourseId).toList();
         return courseIds.stream().flatMap(courseId -> courseStudentRepository.findByCourseId(courseId).stream()
@@ -286,13 +295,26 @@ public class FacultyController {
 
     private FacultyStudentItem toFacultyStudentItem(Student s,
             AttendanceRecordRepository.StudentAttendanceAggregation aggregate) {
+        VeSummary ve = veSummary(s);
         long total = aggregate == null ? 0 : aggregate.getTotal();
         long present = aggregate == null ? 0 : aggregate.getPresent();
         double percentage = total == 0 ? 0 : present * 100.0 / total;
         return new FacultyStudentItem(s.getId(), s.getStudentCode(), s.getFullName(), s.getEmail(),
                 s.getBranchCode(), s.getProgramme(), s.getBranchCode(), null, s.getBatch(), 1,
                 s.getStatus().name(), s.getCreatedAt() == null ? "" : s.getCreatedAt().toString(),
-                percentage, total, present);
+                percentage, total, present, ve.passed(), ve.status(), ve.taken());
+    }
+
+    private VeSummary veSummary(Student student) {
+        var records = attendanceRepository.findStudentHistory(student.getId(), null).stream()
+                .filter(record -> "VE1".equalsIgnoreCase(record.getSession().getCourse().getCourseType())
+                        || "VE1".equalsIgnoreCase(record.getSession().getCourse().getCode())).toList();
+        if (records.isEmpty()) return new VeSummary(false, "NOT_TAKEN", "");
+        long present = records.stream().filter(record -> "PRESENT".equals(record.getStatus().name())).count();
+        boolean passed = present * 100.0 / records.size() >= 75.0;
+        var first = records.stream().map(record -> record.getSession().getSessionDate()).min(java.time.LocalDate::compareTo).orElse(null);
+        String year = records.get(0).getSession().getCourse().getAcademicYear() == null ? "" : records.get(0).getSession().getCourse().getAcademicYear().getName();
+        return new VeSummary(passed, passed ? "PASS" : "FAIL", year + (first == null ? "" : " · " + first));
     }
 
     @GetMapping("/class-sessions")
@@ -455,7 +477,10 @@ public class FacultyController {
     public record FacultyStudentItem(long id, String rollNumber, String name, String email,
             String branchId, String branchName, String branchCode, Long academicYearId,
             String academicYearName, int semester, String status, String createdAt,
-            double attendancePercentage, long totalClasses, long presentClasses) {}
+            double attendancePercentage, long totalClasses, long presentClasses,
+            boolean vePassed, String ve1Status, String ve1Taken) {}
+
+    private record VeSummary(boolean passed, String status, String taken) {}
 
     public record BranchItem(long id, String code, String name, boolean active, String createdAt) {}
 

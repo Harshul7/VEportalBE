@@ -204,7 +204,7 @@ public class MaterialService {
                 org.example.veportal.entity.ActivityKind.MATERIAL,
                 "New course material uploaded",
                 AttendanceService.truncate(saved.getTitle() + " — " + Labels.of(type), 255),
-                "/materials", course.getGroupName() == null ? course.getName() : course.getGroupName());
+                "/materials", course.getGroupName() == null ? course.getName() : course.getGroupName(), course);
         activityService.notifyUser(currentUser,
                 "New material uploaded",
                 saved.getTitle() + " was added to Course Materials.",

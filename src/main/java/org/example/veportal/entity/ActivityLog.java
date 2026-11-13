@@ -33,6 +33,10 @@ public class ActivityLog extends BaseEntity {
     @Column(name = "group_name", length = 150)
     private String groupName;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_id")
+    private Course course;
+
     public UserAccount getUser() {
         return user;
     }
@@ -75,4 +79,7 @@ public class ActivityLog extends BaseEntity {
 
     public String getGroupName() { return groupName; }
     public void setGroupName(String groupName) { this.groupName = groupName; }
+
+    public Course getCourse() { return course; }
+    public void setCourse(Course course) { this.course = course; }
 }

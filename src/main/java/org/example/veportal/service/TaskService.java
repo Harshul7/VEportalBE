@@ -11,13 +11,16 @@ import java.util.UUID;
 import org.example.veportal.config.AppProperties;
 import org.example.veportal.dto.request.TaskCreateRequest;
 import org.example.veportal.dto.response.TaskResponse;
+import org.example.veportal.dto.response.TaskSearchResponse;
 import org.example.veportal.entity.SessionTask;
 import org.example.veportal.entity.TaskDocument;
+import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.BusinessException;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.SessionTaskRepository;
 import org.example.veportal.repository.TaskDocumentRepository;
+import org.example.veportal.security.ResourceAuthorizationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,14 +32,44 @@ public class TaskService {
     private final SessionService sessionService;
     private final Path storageDirectory;
     private final long maxFileBytes;
+    private final ResourceAuthorizationService authorization;
 
     public TaskService(SessionTaskRepository taskRepository, TaskDocumentRepository documentRepository,
-                       SessionService sessionService, AppProperties properties) {
+                       SessionService sessionService, AppProperties properties,
+                       ResourceAuthorizationService authorization) {
         this.taskRepository = taskRepository;
         this.documentRepository = documentRepository;
         this.sessionService = sessionService;
         this.storageDirectory = Path.of(properties.storage().materialsDir()).toAbsolutePath().normalize().resolve("tasks");
         this.maxFileBytes = properties.storage().maxFileBytes();
+        this.authorization = authorization;
+    }
+
+    @Transactional(readOnly = true)
+    public List<TaskSearchResponse> search(String query, UserAccount user) {
+        String term = query == null ? "" : query.trim().toLowerCase();
+        return taskRepository.findByStatusOrderByStartDateAscIdAsc("ACTIVE").stream()
+                .filter(task -> authorization.canAccessSession(task.getSession().getId()))
+                .filter(task -> term.isBlank() || matches(task, term))
+                .map(task -> new TaskSearchResponse(
+                        task.getId(), task.getSession().getId(), task.getTitle(), task.getTaskType(),
+                        task.getDescription(), task.getDueDate(), task.getStartDate(), task.getEndDate(),
+                        task.getStatus(), task.getCreatedBy(), task.getCreatedAt(),
+                        task.getSession().getCourse().getName(), task.getSession().getSessionNumber(),
+                        task.getSession().getTopic(), task.getSession().getSessionDate()))
+                .toList();
+    }
+
+    private boolean matches(SessionTask task, String term) {
+        ClassSession session = task.getSession();
+        return contains(task.getTitle(), term) || contains(task.getDescription(), term)
+                || contains(task.getTaskType(), term) || contains(session.getTopic(), term)
+                || contains(session.getCourse().getName(), term)
+                || String.valueOf(session.getSessionNumber()).contains(term);
+    }
+
+    private boolean contains(String value, String term) {
+        return value != null && value.toLowerCase().contains(term);
     }
 
     @Transactional(readOnly = true)

@@ -8,6 +8,8 @@ public record AdminActivityResponse(
         String kind,
         String href,
         String groupName,
+        String courseName,
+        String academicYearName,
         String actorName,
         String actorEmail
 ) {

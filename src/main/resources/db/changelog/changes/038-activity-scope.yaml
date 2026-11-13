@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 038-activity-scope
+      author: codex
+      changes:
+        - addColumn:
+            tableName: activity_log
+            columns:
+              - column:
+                  name: course_id
+                  type: BIGINT
+        - addForeignKeyConstraint:
+            baseTableName: activity_log
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedColumnNames: id
+            constraintName: fk_activity_log_course
+            onDelete: SET NULL
+        - createIndex:
+            tableName: activity_log
+            indexName: idx_activity_log_course
+            columns:
+              - column:
+                  name: course_id

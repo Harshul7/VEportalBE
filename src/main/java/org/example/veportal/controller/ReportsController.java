@@ -198,6 +198,7 @@ public class ReportsController {
             double percentage = total == 0 ? 0.0 : present * 100.0 / total;
             return new VeCourseHistory(courseId, courseCode, courseName, courseType, academicYear,
                     firstSessionDate, lastSessionDate, total, present, total - present, percentage,
+                    total > 0 && percentage >= 75.0,
                     participationRecords, highParticipationRecords);
         }
     }
@@ -205,7 +206,8 @@ public class ReportsController {
     public record VeCourseHistory(Long courseId, String courseCode, String courseName, String courseType,
                                   String academicYear, java.time.LocalDate firstSessionDate,
                                   java.time.LocalDate lastSessionDate, int totalClasses, int presentClasses,
-                                  int absentClasses, double attendancePercentage, int participationRecords,
+                                  int absentClasses, double attendancePercentage, boolean passed,
+                                  int participationRecords,
                                   int highParticipationRecords) {}
 
     private record ChapterSummary(long chapterId, int chapterNumber, String chapterTitle,

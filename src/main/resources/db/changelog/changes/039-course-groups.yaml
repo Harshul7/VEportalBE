@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 039-course-groups
+      author: codex
+      changes:
+        - createTable:
+            tableName: course_groups
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: updated_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: created_by, type: VARCHAR(120) }
+              - column: { name: updated_by, type: VARCHAR(120) }
+              - column: { name: course_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: name, type: VARCHAR(150), constraints: { nullable: false } }
+              - column: { name: mentor_id, type: BIGINT }
+        - addUniqueConstraint:
+            tableName: course_groups
+            columnNames: course_id, name
+            constraintName: uq_course_groups_course_name
+        - addForeignKeyConstraint: { baseTableName: course_groups, baseColumnNames: course_id, referencedTableName: courses, referencedColumnNames: id, constraintName: fk_course_groups_course }
+        - addForeignKeyConstraint: { baseTableName: course_groups, baseColumnNames: mentor_id, referencedTableName: users, referencedColumnNames: id, constraintName: fk_course_groups_mentor, onDelete: SET NULL }
+        - addColumn:
+            tableName: course_students
+            columns: [{ column: { name: group_id, type: BIGINT } }]
+        - addColumn:
+            tableName: course_faculties
+            columns: [{ column: { name: group_id, type: BIGINT } }]
+        - addForeignKeyConstraint: { baseTableName: course_students, baseColumnNames: group_id, referencedTableName: course_groups, referencedColumnNames: id, constraintName: fk_course_students_group, onDelete: SET NULL }
+        - addForeignKeyConstraint: { baseTableName: course_faculties, baseColumnNames: group_id, referencedTableName: course_groups, referencedColumnNames: id, constraintName: fk_course_faculties_group, onDelete: SET NULL }
+        - sql:
+            sql: INSERT INTO course_groups (created_at, updated_at, course_id, name) SELECT NOW(), NOW(), id, COALESCE(NULLIF(TRIM(group_name), ''), name) FROM courses
+        - sql:
+            sql: UPDATE course_students cs JOIN course_groups cg ON cg.course_id = cs.course_id SET cs.group_id = cg.id
+        - sql:
+            sql: UPDATE course_faculties cf JOIN course_groups cg ON cg.course_id = cf.course_id SET cf.group_id = cg.id

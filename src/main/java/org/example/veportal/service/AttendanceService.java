@@ -110,7 +110,7 @@ public class AttendanceService {
                 org.example.veportal.entity.ActivityKind.ATTENDANCE,
                 "Attendance recorded for Session " + session.getSessionNumber(),
                 truncate(session.getTopic() + " · " + (percent == null ? "—" : percent + "% present"), 255),
-                "/attendance?session=" + session.getId(), session.getCourse().getGroupName() == null ? session.getCourse().getName() : session.getCourse().getGroupName());
+                "/attendance?session=" + session.getId(), session.getCourse().getGroupName() == null ? session.getCourse().getName() : session.getCourse().getGroupName(), session.getCourse());
         activityService.notifyUser(currentUser,
                 "Session record updated",
                 "Attendance for Session " + session.getSessionNumber() + " was saved.",

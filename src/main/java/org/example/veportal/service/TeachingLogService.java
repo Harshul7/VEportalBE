@@ -80,7 +80,7 @@ public class TeachingLogService {
                 org.example.veportal.entity.ActivityKind.LOG,
                 "Teaching log updated for Session " + session.getSessionNumber(),
                 AttendanceService.truncate(session.getTopic(), 255),
-                "/teaching-log?session=" + session.getId(), session.getCourse().getGroupName() == null ? session.getCourse().getName() : session.getCourse().getGroupName());
+                "/teaching-log?session=" + session.getId(), session.getCourse().getGroupName() == null ? session.getCourse().getName() : session.getCourse().getGroupName(), session.getCourse());
         activityService.notifyUser(currentUser,
                 "Teaching log saved",
                 "Session " + session.getSessionNumber() + " — " + session.getTopic(),
