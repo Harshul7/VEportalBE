@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - changeSet:
+      id: 051-user-academic-branch
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: academic_year_id
+                  type: BIGINT
+              - column:
+                  name: branch_id
+                  type: BIGINT
+        - createIndex:
+            tableName: users
+            indexName: idx_users_academic_year
+            columns:
+              - column:
+                  name: academic_year_id
+        - createIndex:
+            tableName: users
+            indexName: idx_users_branch
+            columns:
+              - column:
+                  name: branch_id
+        - addForeignKeyConstraint:
+            baseTableName: users
+            baseColumnNames: academic_year_id
+            referencedTableName: academic_years
+            referencedColumnNames: id
+            constraintName: fk_users_academic_year
+            onDelete: SET NULL
+        - addForeignKeyConstraint:
+            baseTableName: users
+            baseColumnNames: branch_id
+            referencedTableName: branches
+            referencedColumnNames: id
+            constraintName: fk_users_branch
+            onDelete: SET NULL

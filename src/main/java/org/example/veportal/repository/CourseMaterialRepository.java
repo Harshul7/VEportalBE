@@ -17,6 +17,8 @@ public interface CourseMaterialRepository extends JpaRepository<CourseMaterial, 
 
     long countByCourseIdIn(Collection<Long> courseIds);
 
+    long countByCourseId(Long courseId);
+
     @Query("""
             select m from CourseMaterial m
             join fetch m.uploadedBy u

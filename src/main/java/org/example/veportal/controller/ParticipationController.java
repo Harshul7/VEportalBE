@@ -43,6 +43,7 @@ public class ParticipationController {
     }
 
     @PutMapping
+    @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId) and hasAnyRole('FACULTY_COORDINATOR','ADMIN','GROUP_MENTOR','FACULTY')")
     public ResponseEntity<ApiResponse<List<ParticipationRecordResponse>>> save(
             @PathVariable Long sessionId,
             @Valid @RequestBody ParticipationSaveRequest request) {

@@ -34,7 +34,9 @@ public class SessionMapper {
                 session.getTitle(),
                 session.getMode(),
                 session.getSessionType(),
-                session.getDescription()
+                session.getDescription(),
+                session.getGroup() == null ? null : session.getGroup().getId(),
+                session.getGroup() == null ? "" : session.getGroup().getName()
         );
     }
 

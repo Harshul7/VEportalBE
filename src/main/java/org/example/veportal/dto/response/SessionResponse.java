@@ -15,6 +15,8 @@ public record SessionResponse(
         String title,
         String mode,
         String sessionType,
-        String description
+        String description,
+        Long groupId,
+        String groupName
 ) {
 }

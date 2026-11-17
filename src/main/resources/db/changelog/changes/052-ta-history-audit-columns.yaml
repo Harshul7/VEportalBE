@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 052-ta-history-audit-columns
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: ta_group_assignment_history
+            columns:
+              - column: {name: created_by, type: VARCHAR(120)}
+              - column: {name: updated_by, type: VARCHAR(120)}

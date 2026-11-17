@@ -40,4 +40,9 @@ public class NotificationService {
     public void markAllRead(UserAccount user) {
         notificationRepository.markAllRead(user.getId());
     }
+
+    @Transactional
+    public boolean markRead(Long notificationId, UserAccount user) {
+        return notificationRepository.markRead(notificationId, user.getId()) > 0;
+    }
 }

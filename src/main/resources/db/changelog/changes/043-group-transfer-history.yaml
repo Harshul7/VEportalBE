@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 043-group-transfer-history
+      author: codex
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: MARK_RAN
+        - not:
+            - tableExists: { tableName: group_transfer_history }
+      changes:
+        - createTable:
+            tableName: group_transfer_history
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: updated_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: created_by, type: VARCHAR(120) }
+              - column: { name: updated_by, type: VARCHAR(120) }
+              - column: { name: student_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: course_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: previous_group_id, type: BIGINT }
+              - column: { name: new_group_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: transferred_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: reason, type: VARCHAR(500), constraints: { nullable: false } }
+              - column: { name: performed_by, type: BIGINT, constraints: { nullable: false } }
+        - addForeignKeyConstraint: { baseTableName: group_transfer_history, baseColumnNames: student_id, referencedTableName: students, referencedColumnNames: id, constraintName: fk_group_transfer_student }
+        - addForeignKeyConstraint: { baseTableName: group_transfer_history, baseColumnNames: course_id, referencedTableName: courses, referencedColumnNames: id, constraintName: fk_group_transfer_course }
+        - addForeignKeyConstraint: { baseTableName: group_transfer_history, baseColumnNames: previous_group_id, referencedTableName: course_groups, referencedColumnNames: id, constraintName: fk_group_transfer_previous_group }
+        - addForeignKeyConstraint: { baseTableName: group_transfer_history, baseColumnNames: new_group_id, referencedTableName: course_groups, referencedColumnNames: id, constraintName: fk_group_transfer_new_group }
+        - addForeignKeyConstraint: { baseTableName: group_transfer_history, baseColumnNames: performed_by, referencedTableName: users, referencedColumnNames: id, constraintName: fk_group_transfer_actor }

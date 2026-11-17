@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.example.veportal.dto.ApiResponse;
 import org.example.veportal.dto.PagedResult;
+import org.example.veportal.config.AppProperties;
 import org.example.veportal.entity.AccountStatus;
 import org.example.veportal.entity.AcademicYear;
 import org.example.veportal.entity.Branch;
@@ -25,6 +26,8 @@ import org.example.veportal.entity.UserAccount;
 import org.example.veportal.entity.MasterChapterTemplate;
 import org.example.veportal.entity.MasterCourseTemplate;
 import org.example.veportal.entity.Room;
+import org.example.veportal.entity.AcademicSemester;
+import org.example.veportal.entity.CourseCodeMaster;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.AcademicYearRepository;
 import org.example.veportal.repository.BranchRepository;
@@ -42,6 +45,18 @@ import org.example.veportal.repository.TeachingLogRepository;
 import org.example.veportal.repository.MasterChapterTemplateRepository;
 import org.example.veportal.repository.MasterCourseTemplateRepository;
 import org.example.veportal.repository.RoomRepository;
+import org.example.veportal.repository.AcademicSemesterRepository;
+import org.example.veportal.repository.CourseCodeMasterRepository;
+import org.example.veportal.repository.CourseMaterialRepository;
+import org.example.veportal.repository.GroupTopicPlanRepository;
+import org.example.veportal.repository.GroupTransferHistoryRepository;
+import org.example.veportal.repository.TeachingAssistantAssignmentHistoryRepository;
+import org.example.veportal.repository.StudentCourseResultRepository;
+import org.example.veportal.repository.ParticipationRecordRepository;
+import org.example.veportal.security.AuthenticatedUserProvider;
+import org.example.veportal.entity.GroupTransferHistory;
+import org.example.veportal.entity.TeachingAssistantAssignmentHistory;
+import org.example.veportal.entity.StudentCourseResult;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.service.MailService;
 import org.example.veportal.service.AuthService;
@@ -51,6 +66,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -63,6 +79,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -95,6 +112,16 @@ public class AdminController {
     private final MasterCourseTemplateRepository masterCourseTemplateRepository;
     private final MasterChapterTemplateRepository masterChapterTemplateRepository;
     private final RoomRepository roomRepository;
+    private final AcademicSemesterRepository academicSemesterRepository;
+    private final CourseCodeMasterRepository courseCodeMasterRepository;
+    private final GroupTransferHistoryRepository groupTransferHistoryRepository;
+    private final TeachingAssistantAssignmentHistoryRepository taAssignmentHistoryRepository;
+    private final StudentCourseResultRepository studentCourseResultRepository;
+    private final ParticipationRecordRepository participationRecordRepository;
+    private final CourseMaterialRepository courseMaterialRepository;
+    private final GroupTopicPlanRepository groupTopicPlanRepository;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
+    private final AppProperties appProperties;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
@@ -114,7 +141,17 @@ public class AdminController {
                            TeachingLogRepository teachingLogRepository,
                            MasterCourseTemplateRepository masterCourseTemplateRepository,
                            MasterChapterTemplateRepository masterChapterTemplateRepository,
-                           RoomRepository roomRepository) {
+                           RoomRepository roomRepository,
+                           AcademicSemesterRepository academicSemesterRepository,
+                           CourseCodeMasterRepository courseCodeMasterRepository,
+                           GroupTransferHistoryRepository groupTransferHistoryRepository,
+                           TeachingAssistantAssignmentHistoryRepository taAssignmentHistoryRepository,
+                           StudentCourseResultRepository studentCourseResultRepository,
+                           CourseMaterialRepository courseMaterialRepository,
+                           ParticipationRecordRepository participationRecordRepository,
+                           GroupTopicPlanRepository groupTopicPlanRepository,
+                           AuthenticatedUserProvider authenticatedUserProvider,
+                           AppProperties appProperties) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -134,22 +171,43 @@ public class AdminController {
         this.masterCourseTemplateRepository = masterCourseTemplateRepository;
         this.masterChapterTemplateRepository = masterChapterTemplateRepository;
         this.roomRepository = roomRepository;
+        this.academicSemesterRepository = academicSemesterRepository;
+        this.courseCodeMasterRepository = courseCodeMasterRepository;
+        this.groupTransferHistoryRepository = groupTransferHistoryRepository;
+        this.taAssignmentHistoryRepository = taAssignmentHistoryRepository;
+        this.studentCourseResultRepository = studentCourseResultRepository;
+        this.courseMaterialRepository = courseMaterialRepository;
+        this.participationRecordRepository = participationRecordRepository;
+        this.groupTopicPlanRepository = groupTopicPlanRepository;
+        this.authenticatedUserProvider = authenticatedUserProvider;
+        this.appProperties = appProperties;
     }
 
     @GetMapping("/dashboard")
-    public ResponseEntity<ApiResponse<DashboardStats>> dashboard() {
+    public ResponseEntity<ApiResponse<DashboardStats>> dashboard(
+            @RequestParam(required = false) Long academicYearId,
+            @RequestParam(required = false) Long courseId,
+            @RequestParam(required = false) Long groupId,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate) {
         long totalStudents = studentRepository.count();
         long totalFaculty = userAccountRepository.findAll().stream()
                 .filter(u -> u.getRole().isMentor() || u.getRole() == Role.TA)
                 .count();
-        long activeCourses = courseRepository.findAll().stream()
-                .filter(c -> "ACTIVE".equalsIgnoreCase(c.getStatus())).count();
-        long classesConducted = sessionRepository.countByStatus(SessionStatus.COMPLETED);
-        long upcomingSessions = sessionRepository.countByStatus(SessionStatus.SCHEDULED)
-                + sessionRepository.countByStatus(SessionStatus.UPCOMING);
+        var filteredCourses = courseRepository.findAll().stream()
+                .filter(c -> "ACTIVE".equalsIgnoreCase(c.getStatus()))
+                .filter(c -> academicYearId == null || (c.getAcademicYear() != null && academicYearId.equals(c.getAcademicYear().getId())))
+                .filter(c -> courseId == null || courseId.equals(c.getId())).toList();
+        var filteredCourseIds = filteredCourses.stream().map(Course::getId).collect(java.util.stream.Collectors.toSet());
+        var filteredGroups = courseGroupRepository.findAll().stream().filter(g -> filteredCourseIds.contains(g.getCourse().getId())).filter(g -> groupId == null || groupId.equals(g.getId())).toList();
+        var filteredGroupIds = filteredGroups.stream().map(CourseGroup::getId).collect(java.util.stream.Collectors.toSet());
+        var filteredSessions = sessionRepository.findAll().stream().filter(s -> filteredCourseIds.contains(s.getCourse().getId())).filter(s -> groupId == null || (s.getGroup() != null && filteredGroupIds.contains(s.getGroup().getId()))).filter(s -> fromDate == null || !s.getSessionDate().isBefore(fromDate)).filter(s -> toDate == null || !s.getSessionDate().isAfter(toDate)).toList();
+        long activeCourses = filteredCourses.size();
+        long classesConducted = filteredSessions.stream().filter(s -> s.getStatus() == SessionStatus.COMPLETED).count();
+        long upcomingSessions = filteredSessions.stream().filter(s -> s.getStatus() == SessionStatus.SCHEDULED || s.getStatus() == SessionStatus.UPCOMING).count();
         long pendingReports = Math.max(0, classesConducted - teachingLogRepository.count());
-        long totalAttendance = attendanceRepository.countForCompletedSessions();
-        long presentAttendance = attendanceRepository.countPresentForCompletedSessions();
+        long totalAttendance = filteredSessions.stream().flatMap(s -> attendanceRepository.findWithStudentBySessionId(s.getId()).stream()).count();
+        long presentAttendance = filteredSessions.stream().flatMap(s -> attendanceRepository.findWithStudentBySessionId(s.getId()).stream()).filter(a -> a.getStatus() == org.example.veportal.entity.AttendanceStatus.PRESENT).count();
         double attendancePercent = totalAttendance == 0 ? 0.0 : presentAttendance * 100.0 / totalAttendance;
         AcademicYear current = academicYearRepository.findByCurrentTrue().orElse(null);
         long totalChapters = chapterRepository.count();
@@ -158,18 +216,31 @@ public class AdminController {
         DashboardStats stats = new DashboardStats(
                 totalStudents, totalFaculty, totalChapters, classesConducted,
                 attendancePercent, currentYear, activeCourses, totalChapters,
-                upcomingSessions, classesConducted, pendingReports
+                upcomingSessions, classesConducted, pendingReports,
+                filteredGroups.size(), filteredGroups.stream().filter(g -> g.getMentor() == null).count(), filteredGroups.stream().filter(g -> g.getTeachingAssistant() == null).count(),
+                userAccountRepository.findAll().stream().filter(u -> u.getRole().isMentor() && u.getStatus() == AccountStatus.ACTIVE).count(), userAccountRepository.findAll().stream().filter(u -> u.getRole() == Role.TA && u.getStatus() == AccountStatus.ACTIVE).count(),
+                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && r.getFinalResult() == StudentCourseResult.FinalResult.PASS).count(),
+                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && r.getFinalResult() == StudentCourseResult.FinalResult.FAIL).count()
         );
         return ResponseEntity.ok(ApiResponse.success(stats, "Dashboard stats retrieved"));
     }
 
     @GetMapping("/students")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<StudentListItem>>> listStudents(
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "branchId", required = false) Long branchId,
+            @RequestParam(name = "academicYearId", required = false) Long academicYearId,
+            @RequestParam(name = "groupId", required = false) Long groupId,
+            @RequestParam(name = "includeInactive", defaultValue = "false") boolean includeInactive,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         Specification<Student> spec = (root, query, cb) -> cb.conjunction();
+        if (!includeInactive) {
+            spec = spec.and((root, query, cb) -> cb.or(
+                    cb.equal(root.get("status"), AccountStatus.ACTIVE),
+                    cb.isNull(root.get("status"))));
+        }
         if (search != null && !search.isBlank()) {
             String pattern = "%" + search.trim().toLowerCase() + "%";
             spec = spec.and((root, query, cb) -> cb.or(
@@ -182,8 +253,32 @@ public class AdminController {
             if (branch != null) {
                 spec = spec.and((root, query, cb) -> cb.or(
                         cb.equal(root.get("branchCode"), branch.getCode()),
-                        cb.equal(root.get("programme"), branch.getName())));
+                        cb.equal(root.get("programme"), branch.getCode())));
             }
+        }
+        if (academicYearId != null && academicYearId > 0) {
+            spec = spec.and((root, query, cb) -> {
+                var enrollmentQuery = query.subquery(Long.class);
+                var enrollment = enrollmentQuery.from(CourseStudent.class);
+                enrollmentQuery.select(cb.literal(1L));
+                enrollmentQuery.where(
+                        cb.equal(enrollment.get("studentId"), root.get("id")),
+                        cb.equal(enrollment.get("course").get("academicYear").get("id"), academicYearId)
+                );
+                return cb.exists(enrollmentQuery);
+            });
+        }
+        if (groupId != null && groupId > 0) {
+            spec = spec.and((root, query, cb) -> {
+                var enrollmentQuery = query.subquery(Long.class);
+                var enrollment = enrollmentQuery.from(CourseStudent.class);
+                enrollmentQuery.select(cb.literal(1L));
+                enrollmentQuery.where(
+                        cb.equal(enrollment.get("studentId"), root.get("id")),
+                        cb.equal(enrollment.get("groupId"), groupId)
+                );
+                return cb.exists(enrollmentQuery);
+            });
         }
         Page<Student> result = studentRepository.findAll(spec,
                 PageRequest.of(Math.max(page, 0), Math.min(size, 100),
@@ -202,6 +297,7 @@ public class AdminController {
     }
 
     @PostMapping("/students")
+    @Transactional
     public ResponseEntity<ApiResponse<StudentListItem>> createStudent(@RequestBody CreateStudentRequest request) {
         if (request.rollNumber() == null || request.rollNumber().isBlank()) {
             return ResponseEntity.ok(ApiResponse.error("Student ID is required"));
@@ -209,6 +305,17 @@ public class AdminController {
         String code = request.rollNumber().trim();
         if (studentRepository.existsByStudentCodeIgnoreCase(code)) {
             return ResponseEntity.ok(ApiResponse.error("A student with roll number " + code + " already exists"));
+        }
+        Course selectedCourse = null;
+        if (request.courseId() != null) {
+            selectedCourse = courseRepository.findById(request.courseId()).orElse(null);
+            if (selectedCourse == null) return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
+            if (request.academicYearId() == null || selectedCourse.getAcademicYear() == null || !selectedCourse.getAcademicYear().getId().equals(request.academicYearId())) {
+                return ResponseEntity.ok(ApiResponse.error("Selected course does not belong to the selected academic year"));
+            }
+            if (request.groupId() == null || validGroupId(request.courseId(), request.groupId()) == null) {
+                return ResponseEntity.ok(ApiResponse.error("Select a valid group for the selected course"));
+            }
         }
         Student s = new Student();
         s.setStudentCode(code);
@@ -228,14 +335,74 @@ public class AdminController {
         }
         Student saved = studentRepository.save(s);
         if (request.courseId() != null) {
-            if (!courseRepository.existsById(request.courseId())) {
-                return ResponseEntity.ok(ApiResponse.error("Selected course was not found"));
-            }
             Long groupId = validGroupId(request.courseId(), request.groupId());
-            if (request.groupId() != null && groupId == null) return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
             courseStudentRepository.save(new CourseStudent(request.courseId(), saved.getId(), groupId));
         }
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(saved, null), "Student created"));
+    }
+
+    @DeleteMapping("/students/{id}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Object>> deleteStudent(@PathVariable Long id) {
+        Student student = studentRepository.findById(id).orElse(null);
+        if (student == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Student not found"));
+
+        boolean hasAcademicHistory = hasProtectedAcademicHistory(id);
+        if (hasAcademicHistory) {
+            student.setStatus(AccountStatus.INACTIVE);
+            studentRepository.save(student);
+            return ResponseEntity.ok(ApiResponse.success(null, "Student has academic history and was deactivated instead of deleted"));
+        }
+        courseStudentRepository.deleteAll(courseStudentRepository.findByStudentId(id));
+        studentRepository.delete(student);
+        return ResponseEntity.ok(ApiResponse.success(null, "Student deleted"));
+    }
+
+    @PostMapping("/students/bulk-delete")
+    @Transactional
+    public ResponseEntity<ApiResponse<BulkStudentDeleteResult>> bulkDeleteStudents(@RequestBody BulkStudentDeleteRequest request) {
+        if (request == null || request.studentIds() == null || request.studentIds().isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error("Select at least one student"));
+        }
+
+        List<Long> ids = request.studentIds().stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.error("Select at least one valid student"));
+        }
+
+        int deleted = 0;
+        int deactivated = 0;
+        List<Long> missing = new ArrayList<>();
+        for (Long id : ids) {
+            Student student = studentRepository.findById(id).orElse(null);
+            if (student == null) {
+                missing.add(id);
+                continue;
+            }
+
+            if (hasProtectedAcademicHistory(id)) {
+                student.setStatus(AccountStatus.INACTIVE);
+                studentRepository.save(student);
+                deactivated++;
+            } else {
+                courseStudentRepository.deleteAll(courseStudentRepository.findByStudentId(id));
+                studentRepository.delete(student);
+                deleted++;
+            }
+        }
+
+        BulkStudentDeleteResult result = new BulkStudentDeleteResult(ids.size(), deleted, deactivated, missing);
+        return ResponseEntity.ok(ApiResponse.success(result, "Selected students processed"));
+    }
+
+    private boolean hasProtectedAcademicHistory(Long studentId) {
+        return attendanceRepository.existsByStudentId(studentId)
+                || participationRecordRepository.existsByStudentId(studentId)
+                || !studentCourseResultRepository.findByStudentId(studentId).isEmpty()
+                || !groupTransferHistoryRepository.findByStudentIdOrderByTransferredAtDesc(studentId).isEmpty();
     }
 
     @PostMapping(value = "/students/import", consumes = "multipart/form-data")
@@ -354,6 +521,49 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(toStudentItem(s, percent), "Student retrieved"));
     }
 
+    @GetMapping("/students/{id}/group-transfers")
+    public ResponseEntity<ApiResponse<List<GroupTransferItem>>> groupTransfers(@PathVariable Long id) {
+        if (!studentRepository.existsById(id)) return ResponseEntity.ok(ApiResponse.error("Student not found"));
+        List<GroupTransferItem> items = groupTransferHistoryRepository.findByStudentIdOrderByTransferredAtDesc(id).stream()
+                .map(h -> new GroupTransferItem(h.getId(), h.getCourse().getId(), h.getCourse().getCode(),
+                        h.getPreviousGroup() == null ? null : h.getPreviousGroup().getId(),
+                        h.getPreviousGroup() == null ? null : h.getPreviousGroup().getName(),
+                        h.getNewGroup().getId(), h.getNewGroup().getName(), h.getTransferredAt().toString(),
+                        h.getReason(), h.getPerformedBy().getFullName())).toList();
+        return ResponseEntity.ok(ApiResponse.success(items, "Group transfer history retrieved"));
+    }
+
+    public record BulkStudentDeleteRequest(List<Long> studentIds) {}
+    public record BulkStudentDeleteResult(int requested, int deleted, int deactivated, List<Long> missing) {}
+
+    @PostMapping("/students/{id}/group-transfers")
+    @Transactional
+    public ResponseEntity<ApiResponse<GroupTransferItem>> transferStudent(@PathVariable Long id,
+            @RequestBody TransferStudentRequest request) {
+        Student student = studentRepository.findById(id).orElse(null);
+        Course course = request.courseId() == null ? null : courseRepository.findById(request.courseId()).orElse(null);
+        CourseGroup target = request.targetGroupId() == null ? null : courseGroupRepository.findById(request.targetGroupId()).orElse(null);
+        if (student == null || course == null || target == null || !target.getCourse().getId().equals(course.getId())) {
+            return ResponseEntity.ok(ApiResponse.error("Student, course, and target group must be valid and related"));
+        }
+        String reason = request.reason() == null ? "Administrative group transfer" : request.reason().trim();
+        if (reason.isBlank()) return ResponseEntity.ok(ApiResponse.error("Transfer reason is required"));
+        CourseStudent mapping = courseStudentRepository.findByCourseId(request.courseId()).stream()
+                .filter(value -> value.getStudentId().equals(id)).findFirst().orElse(null);
+        if (mapping == null) return ResponseEntity.ok(ApiResponse.error("Student is not enrolled in this course offering"));
+        if (target.getId().equals(mapping.getGroupId())) return ResponseEntity.ok(ApiResponse.error("Student is already in the selected group"));
+        CourseGroup previous = mapping.getGroupId() == null ? null : courseGroupRepository.findById(mapping.getGroupId()).orElse(null);
+        mapping.setGroupId(target.getId());
+        courseStudentRepository.save(mapping);
+        GroupTransferHistory history = new GroupTransferHistory();
+        history.setStudent(student); history.setCourse(course); history.setPreviousGroup(previous); history.setNewGroup(target);
+        history.setTransferredAt(LocalDateTime.now()); history.setReason(reason); history.setPerformedBy(authenticatedUserProvider.currentUser());
+        GroupTransferHistory saved = groupTransferHistoryRepository.save(history);
+        return ResponseEntity.ok(ApiResponse.success(new GroupTransferItem(saved.getId(), course.getId(), course.getCode(),
+                previous == null ? null : previous.getId(), previous == null ? null : previous.getName(), target.getId(), target.getName(),
+                saved.getTransferredAt().toString(), reason, saved.getPerformedBy().getFullName()), "Student transferred successfully"));
+    }
+
     @GetMapping("/students/{id}/performance")
     public ResponseEntity<ApiResponse<StudentPerformance>> studentPerformance(@PathVariable Long id) {
         Student s = studentRepository.findById(id).orElse(null);
@@ -374,8 +584,10 @@ public class AdminController {
     }
 
     @GetMapping("/faculty")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<FacultyListItem>>> listFaculty(
             @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "includeInactive", defaultValue = "true") boolean includeInactive,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
         List<FacultyListItem> faculty = userAccountRepository.findAll().stream()
@@ -383,12 +595,14 @@ public class AdminController {
                 .filter(u -> search == null || search.isBlank()
                         || u.getFullName().toLowerCase().contains(search.toLowerCase())
                         || u.getEmail().toLowerCase().contains(search.toLowerCase()))
+                .filter(u -> includeInactive || u.getStatus() == AccountStatus.ACTIVE)
                 .map(this::toFacultyItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(faculty, "Faculty retrieved"));
     }
 
     @PostMapping("/faculty")
+    @Transactional
     public ResponseEntity<ApiResponse<FacultyListItem>> createFaculty(@RequestBody CreateFacultyRequest request) {
         String email = request.email() == null ? null : request.email().trim();
         if (request.employeeId() == null || request.employeeId().isBlank()) {
@@ -401,6 +615,43 @@ public class AdminController {
         if (!List.of("Faculty", "Staff (Full Time)", "Staff (Part-time)", "PhD Student")
                 .contains(instituteRole)) {
             return ResponseEntity.ok(ApiResponse.error("Select a valid institute role"));
+        }
+        if (request.academicYearId() != null && !academicYearRepository.existsById(request.academicYearId())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected academic year was not found"));
+        }
+        if (request.semesterId() != null) {
+            AcademicSemester selectedSemester = academicSemesterRepository.findById(request.semesterId()).orElse(null);
+            if (selectedSemester == null || (request.academicYearId() != null
+                    && !selectedSemester.getAcademicYear().getId().equals(request.academicYearId()))) {
+                return ResponseEntity.ok(ApiResponse.error("Selected semester does not belong to the selected academic year"));
+            }
+            if (request.courseId() != null) {
+                Course selectedCourse = courseRepository.findById(request.courseId()).orElse(null);
+                if (selectedCourse == null || selectedCourse.getSemesterRef() == null
+                        || !selectedCourse.getSemesterRef().getId().equals(selectedSemester.getId())) {
+                    return ResponseEntity.ok(ApiResponse.error("Selected semester does not match the mapped course"));
+                }
+            }
+        }
+        if (request.courseId() != null && request.academicYearId() != null) {
+            Course selectedCourse = courseRepository.findById(request.courseId()).orElse(null);
+            if (selectedCourse == null || selectedCourse.getAcademicYear() == null
+                    || !selectedCourse.getAcademicYear().getId().equals(request.academicYearId())) {
+                return ResponseEntity.ok(ApiResponse.error("Mapped course does not belong to the selected academic year"));
+            }
+        }
+        boolean teachingAssistant = "TA".equalsIgnoreCase(request.role());
+        if (!teachingAssistant && request.academicYearId() == null) {
+            return ResponseEntity.ok(ApiResponse.error("Group Mentor onboarding requires an academic year"));
+        }
+        Branch selectedBranch = request.branchId() == null ? null : branchRepository.findById(request.branchId()).orElse(null);
+        if (request.branchId() != null && (selectedBranch == null || !selectedBranch.isActive())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected branch was not found or is inactive"));
+        }
+        if (selectedBranch != null && request.academicYearId() != null
+                && selectedBranch.getAcademicYear() != null
+                && !selectedBranch.getAcademicYear().getId().equals(request.academicYearId())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected branch does not belong to the selected academic year"));
         }
         String employeeId = request.employeeId() == null ? null : request.employeeId().trim();
         if (userAccountRepository.existsByEmailIgnoreCase(email)) {
@@ -415,10 +666,25 @@ public class AdminController {
         user.setStaffCode(employeeId == null || employeeId.isBlank()
                 ? generatedStaffCode() : request.employeeId().trim());
         user.setDepartment(instituteRole);
+        user.setAcademicYear(request.academicYearId() == null ? null
+                : academicYearRepository.findById(request.academicYearId()).orElse(null));
+        user.setBranch(selectedBranch);
         user.setRole("TA".equalsIgnoreCase(request.role()) ? Role.TA : Role.GROUP_MENTOR);
         user.setStatus(AccountStatus.ACTIVE);
         user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
         user.setMustChangePassword(true);
+        if ("TA".equalsIgnoreCase(request.role()) && (request.courseId() == null || request.groupId() == null)) {
+            return ResponseEntity.ok(ApiResponse.error("Teaching Assistants must be mapped to a course group during onboarding"));
+        }
+        if ("TA".equalsIgnoreCase(request.role()) && request.courseId() != null && request.groupId() != null) {
+            CourseGroup selectedGroup = courseGroupRepository.findById(request.groupId()).orElse(null);
+            if (selectedGroup == null || !selectedGroup.getCourse().getId().equals(request.courseId())) {
+                return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
+            }
+            if (selectedGroup.getTeachingAssistant() != null) {
+                return ResponseEntity.ok(ApiResponse.error("This group already has an active Teaching Assistant. Reassign it from the group assignment workflow."));
+            }
+        }
         UserAccount saved = userAccountRepository.save(user);
         if (request.courseId() != null) {
             if (!courseRepository.existsById(request.courseId())) {
@@ -427,14 +693,85 @@ public class AdminController {
             Long groupId = validGroupId(request.courseId(), request.groupId());
             if (request.groupId() != null && groupId == null) return ResponseEntity.ok(ApiResponse.error("Selected group does not belong to this course"));
             courseFacultyRepository.save(new CourseFaculty(request.courseId(), saved.getId(), groupId));
-            if (groupId != null) {
+            if (groupId != null && saved.getRole().isMentor()) {
                 CourseGroup group = courseGroupRepository.findById(groupId).orElseThrow();
                 group.setMentor(saved); courseGroupRepository.save(group);
+            } else if (groupId != null && saved.getRole() == Role.TA) {
+                CourseGroup group = courseGroupRepository.findById(groupId).orElseThrow();
+                group.setTeachingAssistant(saved); courseGroupRepository.save(group);
+                recordTaAssignment(group, saved, "Initial TA onboarding");
             }
         }
         authService.issuePasswordSetup(saved);
         return ResponseEntity.ok(ApiResponse.success(
                 toFacultyItem(saved), "Faculty created; an activation link was sent by email"));
+    }
+
+    @PutMapping("/faculty/{id}")
+    @Transactional
+    public ResponseEntity<ApiResponse<FacultyListItem>> updateFaculty(@PathVariable Long id,
+                                                                       @RequestBody CreateFacultyRequest request) {
+        UserAccount user = userAccountRepository.findById(id).orElse(null);
+        if (user == null || !(user.getRole().isMentor() || user.getRole() == Role.TA)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Profile not found"));
+        }
+        String email = request.email() == null ? "" : request.email().trim();
+        String employeeId = request.employeeId() == null ? "" : request.employeeId().trim();
+        String name = request.name() == null ? "" : request.name().trim();
+        String department = request.department() == null ? "" : request.department().trim();
+        if (name.isBlank() || email.isBlank() || employeeId.isBlank() || department.isBlank()) {
+            return ResponseEntity.ok(ApiResponse.error("Name, email, employee ID and institute role are required"));
+        }
+        Optional<UserAccount> sameEmail = userAccountRepository.findByEmailIgnoreCase(email);
+        if (sameEmail.isPresent() && !sameEmail.get().getId().equals(id)) {
+            return ResponseEntity.ok(ApiResponse.error("A user with email " + email + " already exists"));
+        }
+        Optional<UserAccount> sameStaffCode = userAccountRepository.findByStaffCodeIgnoreCase(employeeId);
+        if (sameStaffCode.isPresent() && !sameStaffCode.get().getId().equals(id)) {
+            return ResponseEntity.ok(ApiResponse.error("A user with Employee ID " + employeeId + " already exists"));
+        }
+        user.setFullName(name);
+        user.setEmail(email);
+        user.setStaffCode(employeeId);
+        user.setDepartment(department);
+        if (request.academicYearId() != null && !academicYearRepository.existsById(request.academicYearId())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected academic year was not found"));
+        }
+        Branch selectedBranch = request.branchId() == null ? null : branchRepository.findById(request.branchId()).orElse(null);
+        if (request.branchId() != null && (selectedBranch == null || !selectedBranch.isActive())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected branch was not found or is inactive"));
+        }
+        if (selectedBranch != null && request.academicYearId() != null
+                && selectedBranch.getAcademicYear() != null
+                && !selectedBranch.getAcademicYear().getId().equals(request.academicYearId())) {
+            return ResponseEntity.ok(ApiResponse.error("Selected branch does not belong to the selected academic year"));
+        }
+        if (request.academicYearId() != null) user.setAcademicYear(academicYearRepository.findById(request.academicYearId()).orElse(null));
+        // Branch is optional metadata for staff accounts. A group can contain
+        // students from multiple branches, so it must never constrain the
+        // mentor's group assignment or access scope. Setting the value even
+        // when null also lets the coordinator clear an old branch mapping.
+        user.setBranch(selectedBranch);
+        return ResponseEntity.ok(ApiResponse.success(toFacultyItem(userAccountRepository.save(user)), "Profile updated"));
+    }
+
+    @DeleteMapping("/faculty/{id}")
+    @Transactional
+    public ResponseEntity<ApiResponse<FacultyListItem>> deleteFaculty(@PathVariable Long id) {
+        UserAccount user = userAccountRepository.findById(id).orElse(null);
+        if (user == null || !(user.getRole().isMentor() || user.getRole() == Role.TA)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Profile not found"));
+        }
+        courseGroupRepository.findAll().stream()
+                .filter(group -> (group.getMentor() != null && group.getMentor().getId().equals(id))
+                        || (group.getTeachingAssistant() != null && group.getTeachingAssistant().getId().equals(id)))
+                .forEach(group -> {
+                    if (group.getMentor() != null && group.getMentor().getId().equals(id)) group.setMentor(null);
+                    if (group.getTeachingAssistant() != null && group.getTeachingAssistant().getId().equals(id)) group.setTeachingAssistant(null);
+                    courseGroupRepository.save(group);
+                });
+        user.setStatus(AccountStatus.INACTIVE);
+        return ResponseEntity.ok(ApiResponse.success(toFacultyItem(userAccountRepository.save(user)), "Profile deleted and account deactivated"));
     }
 
     @PostMapping("/faculty/{id}/account")
@@ -475,44 +812,118 @@ public class AdminController {
     }
 
     @PostMapping("/faculty/{id}/reset-password")
-    public ResponseEntity<ApiResponse<Object>> resetFacultyPassword(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<PasswordResetResult>> resetFacultyPassword(@PathVariable Long id) {
         UserAccount user = userAccountRepository.findById(id).orElse(null);
         if (user == null) {
             return ResponseEntity.ok(ApiResponse.error("Faculty not found"));
         }
-        user.setPasswordHash(passwordEncoder.encode(generateTemporaryPassword()));
+        String temporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
         user.setMustChangePassword(true);
-        userAccountRepository.save(user);
+        UserAccount saved = userAccountRepository.save(user);
         authService.issuePasswordSetup(user);
-        return ResponseEntity.ok(ApiResponse.success(null, "Password setup link sent by email"));
+        String visiblePassword = appProperties.security().allowTemporaryPasswordDisplay()
+                ? temporaryPassword : null;
+        return ResponseEntity.ok(ApiResponse.success(
+                new PasswordResetResult(saved.getEmail(), visiblePassword),
+                visiblePassword == null
+                        ? "Password setup link sent by email"
+                        : "Temporary password generated. It must be changed at first login."));
     }
 
+    public record PasswordResetResult(String email, String temporaryPassword) {}
+
     @GetMapping("/branches")
-    public ResponseEntity<ApiResponse<List<BranchItem>>> listBranches() {
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponse<List<BranchItem>>> listBranches(
+            @RequestParam(name = "academicYearId", required = false) Long academicYearId) {
         List<BranchItem> branches = branchRepository.findByActiveTrueOrderByCodeAsc().stream()
-                .map(b -> new BranchItem(b.getId(), b.getCode(), b.getName(), b.isActive(),
-                        b.getCreatedAt() == null ? "" : b.getCreatedAt().toString())).toList();
+                .filter(branch -> academicYearId == null || branch.getAcademicYear() == null
+                        || branch.getAcademicYear().getId().equals(academicYearId))
+                .map(b -> new BranchItem(b.getId(), b.getCode(), b.getCode(), b.isActive(),
+                        b.getCreatedAt() == null ? "" : b.getCreatedAt().toString(),
+                        b.getAcademicYear() == null ? null : b.getAcademicYear().getId(),
+                        b.getAcademicYear() == null ? null : b.getAcademicYear().getName())).toList();
         return ResponseEntity.ok(ApiResponse.success(branches, "Branches retrieved"));
     }
 
     @PostMapping("/branches")
     public ResponseEntity<ApiResponse<BranchItem>> createBranch(@RequestBody CreateBranchRequest request) {
-        String name = request.name() == null || request.name().isBlank()
-                ? (request.code() == null ? "New Branch" : request.code()) : request.name().trim();
-        String code = request.code() == null || request.code().isBlank() ? name : request.code().trim();
+        AcademicYear academicYear = request.academicYearId() == null ? null
+                : academicYearRepository.findById(request.academicYearId()).orElse(null);
+        if (request.academicYearId() != null && academicYear == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Academic year not found"));
+        }
+        if (request.code() == null || request.code().isBlank()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Branch short code is required"));
+        }
+        String code = request.code().trim().toUpperCase();
+        String name = code;
+        if (code.length() > 20 || name.length() > 120) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Branch code or name is too long"));
+        }
+        if (branchRepository.findByCodeIgnoreCase(code).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("A branch with this code already exists"));
+        }
         Branch branch = new Branch();
         branch.setCode(code.toUpperCase());
         branch.setName(name);
         branch.setActive(true);
+        branch.setAcademicYear(academicYear);
         Branch saved = branchRepository.save(branch);
-        return ResponseEntity.ok(ApiResponse.success(new BranchItem(saved.getId(), saved.getCode(), saved.getName(),
-                saved.isActive(), saved.getCreatedAt() == null ? "" : saved.getCreatedAt().toString()), "Branch created"));
+        return ResponseEntity.ok(ApiResponse.success(new BranchItem(saved.getId(), saved.getCode(), saved.getCode(),
+                saved.isActive(), saved.getCreatedAt() == null ? "" : saved.getCreatedAt().toString(),
+                academicYear == null ? null : academicYear.getId(), academicYear == null ? null : academicYear.getName()), "Branch created"));
+    }
+
+    @PutMapping("/branches/{branchId}")
+    public ResponseEntity<ApiResponse<BranchItem>> updateBranch(@PathVariable Long branchId,
+                                                                  @RequestBody CreateBranchRequest request) {
+        Branch branch = branchRepository.findById(branchId).orElse(null);
+        if (branch == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Branch not found"));
+        String code = request.code() == null ? branch.getCode() : request.code().trim().toUpperCase();
+        String name = code;
+        if (name.isBlank() || code.isBlank() || code.length() > 20 || name.length() > 120) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Valid branch code and name are required"));
+        }
+        var duplicate = branchRepository.findByCodeIgnoreCase(code);
+        if (duplicate.isPresent() && !duplicate.get().getId().equals(branchId)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("A branch with this code already exists"));
+        }
+        AcademicYear year = request.academicYearId() == null ? null
+                : academicYearRepository.findById(request.academicYearId()).orElse(null);
+        if (request.academicYearId() != null && year == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Academic year not found"));
+        }
+        branch.setCode(code); branch.setName(name); branch.setAcademicYear(year);
+        Branch saved = branchRepository.save(branch);
+        return ResponseEntity.ok(ApiResponse.success(toBranchItem(saved), "Branch updated"));
+    }
+
+    @DeleteMapping("/branches/{branchId}")
+    public ResponseEntity<ApiResponse<Object>> archiveBranch(@PathVariable Long branchId) {
+        Branch branch = branchRepository.findById(branchId).orElse(null);
+        if (branch == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Branch not found"));
+        if (studentRepository.findAll().stream().anyMatch(student -> branch.getCode().equalsIgnoreCase(student.getBranchCode()))) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This branch is used by students and can only be deactivated after student records are reassigned"));
+        }
+        branch.setActive(false); branchRepository.save(branch);
+        return ResponseEntity.ok(ApiResponse.success(null, "Branch archived"));
+    }
+
+    private BranchItem toBranchItem(Branch branch) {
+        return new BranchItem(branch.getId(), branch.getCode(), branch.getCode(), branch.isActive(),
+                branch.getCreatedAt() == null ? "" : branch.getCreatedAt().toString(),
+                branch.getAcademicYear() == null ? null : branch.getAcademicYear().getId(),
+                branch.getAcademicYear() == null ? null : branch.getAcademicYear().getName());
     }
 
     @GetMapping("/academic-years")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<AcademicYearItem>>> listAcademicYears() {
         List<AcademicYearItem> items = academicYearRepository.findAll(Sort.by(Sort.Direction.DESC, "startYear"))
                 .stream()
+                .filter(year -> year.getStatus() == null || year.getStatus() == AccountStatus.ACTIVE)
                 .map(this::toAcademicYearItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(items, "Academic years retrieved"));
@@ -558,18 +969,120 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(toAcademicYearItem(saved), "Academic year marked as current"));
     }
 
+    @PutMapping("/academic-years/{yearId}")
+    public ResponseEntity<ApiResponse<AcademicYearItem>> updateAcademicYear(@PathVariable Long yearId, @RequestBody CreateAcademicYearRequest request) {
+        AcademicYear year = academicYearRepository.findById(yearId).orElse(null);
+        if (year == null) return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
+        if (request.startYear() == null || request.endYear() == null || request.endYear() <= request.startYear()) return ResponseEntity.ok(ApiResponse.error("Valid start and end years are required"));
+        String name = request.name() == null || request.name().isBlank() ? request.startYear() + "-" + request.endYear() : request.name().trim();
+        academicYearRepository.findByName(name).filter(existing -> !existing.getId().equals(yearId)).ifPresent(existing -> { throw new org.example.veportal.exception.ConflictException("Academic year already exists"); });
+        year.setName(name); year.setStartYear(request.startYear()); year.setEndYear(request.endYear());
+        return ResponseEntity.ok(ApiResponse.success(toAcademicYearItem(academicYearRepository.save(year)), "Academic year updated"));
+    }
+
+    @DeleteMapping("/academic-years/{yearId}")
+    public ResponseEntity<ApiResponse<Object>> archiveAcademicYear(@PathVariable Long yearId) {
+        AcademicYear year = academicYearRepository.findById(yearId).orElse(null);
+        if (year == null) return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
+        year.setStatus(AccountStatus.INACTIVE);
+        year.setCurrent(false);
+        academicYearRepository.save(year);
+        return ResponseEntity.ok(ApiResponse.success(null, "Academic year archived"));
+    }
+
+    @GetMapping("/academic-years/{yearId}/semesters")
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponse<List<SemesterItem>>> semesters(@PathVariable Long yearId) {
+        return ResponseEntity.ok(ApiResponse.success(academicSemesterRepository.findByAcademicYearIdAndStatusOrderByNameAsc(yearId, "ACTIVE")
+                .stream().map(s -> new SemesterItem(s.getId(), s.getName(), s.getAcademicYear().getId())).toList(), "Semesters retrieved"));
+    }
+
+    @PostMapping("/academic-years/{yearId}/semesters")
+    public ResponseEntity<ApiResponse<SemesterItem>> createSemester(@PathVariable Long yearId, @RequestBody SemesterRequest request) {
+        AcademicYear year = academicYearRepository.findById(yearId).orElse(null);
+        if (year == null) return ResponseEntity.ok(ApiResponse.error("Academic year not found"));
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Semester name is required"));
+        if (academicSemesterRepository.findByAcademicYearIdAndNameIgnoreCase(yearId, name).isPresent()) return ResponseEntity.ok(ApiResponse.error("Semester already exists"));
+        AcademicSemester semester = new AcademicSemester(); semester.setAcademicYear(year); semester.setName(name);
+        AcademicSemester saved = academicSemesterRepository.save(semester);
+        return ResponseEntity.ok(ApiResponse.success(new SemesterItem(saved.getId(), saved.getName(), yearId), "Semester added"));
+    }
+
+    @PutMapping("/semesters/{semesterId}")
+    public ResponseEntity<ApiResponse<SemesterItem>> updateSemester(@PathVariable Long semesterId, @RequestBody SemesterRequest request) {
+        AcademicSemester semester = academicSemesterRepository.findById(semesterId).orElse(null);
+        if (semester == null) return ResponseEntity.ok(ApiResponse.error("Semester not found"));
+        String name = request.name() == null ? "" : request.name().trim();
+        if (name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Semester name is required"));
+        semester.setName(name);
+        AcademicSemester saved = academicSemesterRepository.save(semester);
+        return ResponseEntity.ok(ApiResponse.success(new SemesterItem(saved.getId(), saved.getName(), saved.getAcademicYear().getId()), "Semester updated"));
+    }
+
+    @DeleteMapping("/semesters/{semesterId}")
+    public ResponseEntity<ApiResponse<Object>> deleteSemester(@PathVariable Long semesterId) {
+        AcademicSemester semester = academicSemesterRepository.findById(semesterId).orElse(null);
+        if (semester == null) return ResponseEntity.ok(ApiResponse.error("Semester not found"));
+        semester.setStatus("ARCHIVED"); academicSemesterRepository.save(semester);
+        return ResponseEntity.ok(ApiResponse.success(null, "Semester archived"));
+    }
+
+    @GetMapping("/master-data/course-codes")
+    public ResponseEntity<ApiResponse<List<CourseCodeItem>>> courseCodes() {
+        return ResponseEntity.ok(ApiResponse.success(courseCodeMasterRepository.findByStatusOrderByCodeAsc("ACTIVE").stream()
+                .map(c -> new CourseCodeItem(c.getId(), c.getCode(), c.getName())).toList(), "Course codes retrieved"));
+    }
+
+    @PostMapping("/master-data/course-codes")
+    public ResponseEntity<ApiResponse<CourseCodeItem>> createCourseCode(@RequestBody CourseCodeRequest request) {
+        String code = request.code() == null ? "" : request.code().trim().toUpperCase(Locale.ROOT);
+        String name = request.name() == null ? "" : request.name().trim();
+        if (code.isBlank() || name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Course code and name are required"));
+        if (courseCodeMasterRepository.findByCodeIgnoreCase(code).isPresent()) return ResponseEntity.ok(ApiResponse.error("Course code already exists"));
+        CourseCodeMaster value = new CourseCodeMaster(); value.setCode(code); value.setName(name);
+        CourseCodeMaster saved = courseCodeMasterRepository.save(value);
+        return ResponseEntity.ok(ApiResponse.success(new CourseCodeItem(saved.getId(), saved.getCode(), saved.getName()), "Course code added"));
+    }
+
+    @PutMapping("/master-data/course-codes/{codeId}")
+    public ResponseEntity<ApiResponse<CourseCodeItem>> updateCourseCode(@PathVariable Long codeId, @RequestBody CourseCodeRequest request) {
+        CourseCodeMaster value = courseCodeMasterRepository.findById(codeId).orElse(null);
+        if (value == null) return ResponseEntity.ok(ApiResponse.error("Course code not found"));
+        value.setCode(request.code().trim().toUpperCase(Locale.ROOT)); value.setName(request.name().trim());
+        CourseCodeMaster saved = courseCodeMasterRepository.save(value);
+        return ResponseEntity.ok(ApiResponse.success(new CourseCodeItem(saved.getId(), saved.getCode(), saved.getName()), "Course code updated"));
+    }
+
+    @DeleteMapping("/master-data/course-codes/{codeId}")
+    public ResponseEntity<ApiResponse<Object>> deleteCourseCode(@PathVariable Long codeId) {
+        CourseCodeMaster value = courseCodeMasterRepository.findById(codeId).orElse(null);
+        if (value == null) return ResponseEntity.ok(ApiResponse.error("Course code not found"));
+        value.setStatus("ARCHIVED"); courseCodeMasterRepository.save(value);
+        return ResponseEntity.ok(ApiResponse.success(null, "Course code archived"));
+    }
+
     @GetMapping("/academic-years/{yearId}/courses")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<CourseListItem>>> coursesByYear(@PathVariable Long yearId) {
         List<CourseListItem> courses = courseRepository.findByAcademicYearIdOrderByCodeAsc(yearId)
                 .stream()
+                .filter(course -> !"ARCHIVED".equalsIgnoreCase(course.getStatus()))
                 .map(this::toCourseItem)
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(courses, "Courses retrieved"));
     }
 
     @GetMapping("/courses/{courseId}/groups")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<CourseGroupItem>>> courseGroups(@PathVariable Long courseId) {
         return ResponseEntity.ok(ApiResponse.success(courseGroupRepository.findByCourseIdOrderByNameAsc(courseId).stream().map(this::toCourseGroupItem).toList(), "Course groups retrieved"));
+    }
+
+    @GetMapping("/course-groups/{groupId}/ta-history")
+    public ResponseEntity<ApiResponse<List<TaAssignmentHistoryItem>>> taHistory(@PathVariable Long groupId) {
+        if (!courseGroupRepository.existsById(groupId)) return ResponseEntity.status(404).body(ApiResponse.error("Group not found"));
+        return ResponseEntity.ok(ApiResponse.success(taAssignmentHistoryRepository.findByGroupIdOrderByAssignedAtDesc(groupId).stream().map(h -> new TaAssignmentHistoryItem(h.getId(), h.getTeachingAssistant().getId(), h.getTeachingAssistant().getFullName(), h.getAssignedAt(), h.getEndedAt(), h.getStatus(), h.getReason())).toList(), "TA assignment history retrieved"));
     }
 
     @PostMapping("/courses/{courseId}/groups")
@@ -584,6 +1097,11 @@ public class AdminController {
             UserAccount mentor = userAccountRepository.findById(request.mentorId()).orElse(null);
             if (mentor == null || !mentor.getRole().isMentor()) return ResponseEntity.ok(ApiResponse.error("Selected mentor was not found"));
             group.setMentor(mentor);
+        }
+        if (request.taId() != null) {
+            UserAccount ta = userAccountRepository.findById(request.taId()).orElse(null);
+            if (ta == null || ta.getRole() != Role.TA) return ResponseEntity.ok(ApiResponse.error("Selected teaching assistant was not found"));
+            group.setTeachingAssistant(ta);
         }
         return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(courseGroupRepository.save(group)), "Group created"));
     }
@@ -601,10 +1119,43 @@ public class AdminController {
             if (mentor == null || !mentor.getRole().isMentor()) return ResponseEntity.ok(ApiResponse.error("Selected mentor was not found"));
             group.setMentor(mentor);
         }
-        return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(courseGroupRepository.save(group)), "Group updated"));
+        UserAccount previousTa = group.getTeachingAssistant();
+        if (request.taId() == null) group.setTeachingAssistant(null); else {
+            UserAccount ta = userAccountRepository.findById(request.taId()).orElse(null);
+            if (ta == null || ta.getRole() != Role.TA) return ResponseEntity.ok(ApiResponse.error("Selected teaching assistant was not found"));
+            if (group.getTeachingAssistant() != null && !group.getTeachingAssistant().getId().equals(ta.getId())) {
+                taAssignmentHistoryRepository.findByGroupIdOrderByAssignedAtDesc(groupId).stream().filter(h -> "ACTIVE".equals(h.getStatus()) && h.getEndedAt() == null).findFirst().ifPresent(h -> { h.setEndedAt(LocalDateTime.now()); h.setStatus("ENDED"); taAssignmentHistoryRepository.save(h); });
+            }
+            group.setTeachingAssistant(ta);
+        }
+        CourseGroup savedGroup = courseGroupRepository.save(group);
+        if (savedGroup.getTeachingAssistant() != null && (previousTa == null || !previousTa.getId().equals(savedGroup.getTeachingAssistant().getId()))) recordTaAssignment(savedGroup, savedGroup.getTeachingAssistant(), "Group assignment updated");
+        return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(savedGroup), "Group updated"));
+    }
+
+    @DeleteMapping("/course-groups/{groupId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Object>> deleteCourseGroup(@PathVariable Long groupId) {
+        CourseGroup group = courseGroupRepository.findById(groupId).orElse(null);
+        if (group == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Group not found"));
+        List<CourseStudent> enrollments = courseStudentRepository.findByGroupId(groupId);
+        List<CourseStudent> protectedEnrollments = enrollments.stream()
+                .filter(enrollment -> studentRepository.findById(enrollment.getStudentId())
+                        .map(student -> student.getStatus() == AccountStatus.ACTIVE || hasProtectedAcademicHistory(student.getId()))
+                        .orElse(false))
+                .toList();
+        if (!protectedEnrollments.isEmpty()) return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This group cannot be deleted because active students or protected academic history is still linked to it. Transfer or remove the students first."));
+        // Remove only stale mappings left by removed/deactivated students without protected history.
+        if (!enrollments.isEmpty()) courseStudentRepository.deleteAll(enrollments);
+        if (sessionRepository.countByGroupId(groupId) > 0) return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This group cannot be deleted because it has class sessions or academic history. Archive it instead."));
+        if (!groupTopicPlanRepository.findByGroupIdOrderByWeekNumberAscDisplayOrderAscIdAsc(groupId).isEmpty()) return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This group cannot be deleted because it has a topic plan. Archive it instead."));
+        if (taAssignmentHistoryRepository.countByGroupId(groupId) > 0) return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This group cannot be deleted because assignment history exists. Archive it instead."));
+        courseGroupRepository.delete(group);
+        return ResponseEntity.ok(ApiResponse.success(null, "Group deleted"));
     }
 
     @PostMapping("/courses")
+    @Transactional
     public ResponseEntity<ApiResponse<CourseListItem>> createCourse(@RequestBody CreateCourseRequest request) {
         if (request.academicYearId() == null) {
             return ResponseEntity.ok(ApiResponse.error("Select an academic year before creating a course"));
@@ -628,6 +1179,12 @@ public class AdminController {
         course.setCourseType(request.courseType() == null ? "VE1" : request.courseType().trim());
         course.setTerm(course.getCourseType());
         course.setSemester(request.semester() == null || request.semester() < 1 ? 1 : request.semester());
+        if (request.semesterId() != null) {
+            AcademicSemester semester = academicSemesterRepository.findById(request.semesterId()).orElse(null);
+            if (semester == null || !semester.getAcademicYear().getId().equals(academicYear.getId())) return ResponseEntity.ok(ApiResponse.error("Selected semester does not belong to this academic year"));
+            course.setSemesterRef(semester);
+            course.setTerm(semester.getName());
+        }
         course.setGroupName(request.groupName() == null || request.groupName().isBlank()
                 ? course.getName().trim() : request.groupName().trim());
         course.setStatus("ACTIVE");
@@ -638,21 +1195,55 @@ public class AdminController {
         for (String groupName : requestedGroups) {
             CourseGroup group = new CourseGroup(); group.setCourse(saved); group.setName(groupName); courseGroupRepository.save(group);
         }
-        masterCourseTemplateRepository.findByCode(course.getCourseType())
-                .filter(template -> template.getSemester().equals(course.getSemester()))
-                .ifPresent(template -> masterChapterTemplateRepository
-                        .findByCourseTemplateIdAndStatusOrderByChapterNumberAsc(template.getId(), "ACTIVE")
-                        .forEach(master -> {
-                            Chapter chapter = new Chapter();
-                            chapter.setCourse(saved);
-                            chapter.setChapterNumber(master.getChapterNumber());
-                            chapter.setTitle(master.getTitle());
-                            chapter.setDescription(master.getDescription());
-                            chapter.setDisplayOrder(master.getChapterNumber());
-                            chapter.setStatus("ACTIVE");
-                            chapterRepository.save(chapter);
-                        }));
+        // Book topics are central master data. New course offerings must not
+        // create a second, course-owned copy of every topic.
         return ResponseEntity.ok(ApiResponse.success(toCourseItem(saved), "Course created"));
+    }
+
+    @PutMapping("/courses/{courseId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<CourseListItem>> updateCourse(@PathVariable Long courseId, @RequestBody CreateCourseRequest request) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) return ResponseEntity.ok(ApiResponse.error("Course not found"));
+        if (request.name() == null || request.name().isBlank() || request.code() == null || request.code().isBlank()) return ResponseEntity.ok(ApiResponse.error("Course name and code are required"));
+        course.setName(request.name().trim()); course.setCode(request.code().trim());
+        if (request.courseType() != null && !request.courseType().isBlank()) course.setCourseType(request.courseType().trim());
+        if (request.semester() != null && request.semester() > 0) course.setSemester(request.semester());
+        if (request.semesterId() != null) {
+            AcademicSemester semester = academicSemesterRepository.findById(request.semesterId()).orElse(null);
+            if (semester == null || !semester.getAcademicYear().getId().equals(course.getAcademicYear().getId())) return ResponseEntity.ok(ApiResponse.error("Selected semester does not belong to this academic year"));
+            course.setSemesterRef(semester); course.setTerm(semester.getName());
+        }
+        return ResponseEntity.ok(ApiResponse.success(toCourseItem(courseRepository.save(course)), "Course updated"));
+    }
+
+    @DeleteMapping("/courses/{courseId}")
+    @Transactional
+    public ResponseEntity<ApiResponse<Object>> deleteCourseOffering(@PathVariable Long courseId) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Course offering not found"));
+        List<CourseGroup> groups = courseGroupRepository.findByCourseIdOrderByNameAsc(courseId);
+        List<String> dependencies = new ArrayList<>();
+        if (!groups.isEmpty()) dependencies.add(groups.size() + " group" + (groups.size() == 1 ? "" : "s"));
+        if (!courseStudentRepository.findByCourseId(courseId).isEmpty()) dependencies.add("student enrollments");
+        if (!sessionRepository.findAllWithFacultyByCourse(courseId).isEmpty()) dependencies.add("class sessions");
+        if (!courseFacultyRepository.findByCourseId(courseId).isEmpty()) dependencies.add("mentor mappings");
+        if (chapterRepository.countByCourseId(courseId) > 0) dependencies.add("legacy topic records");
+        if (courseMaterialRepository.countByCourseId(courseId) > 0) dependencies.add("course materials");
+        if (studentCourseResultRepository.findAll().stream().anyMatch(result -> result.getCourse() != null && result.getCourse().getId().equals(courseId))) dependencies.add("published or draft results");
+        if (!dependencies.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.error("This course offering cannot be deleted because it contains " + String.join(", ", dependencies) + ". Archive it instead to preserve academic history."));
+        }
+        courseRepository.delete(course);
+        return ResponseEntity.ok(ApiResponse.success(null, "Course offering deleted"));
+    }
+
+    @PatchMapping("/courses/{courseId}/archive")
+    public ResponseEntity<ApiResponse<Object>> archiveCourse(@PathVariable Long courseId) {
+        Course course = courseRepository.findById(courseId).orElse(null);
+        if (course == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Course offering not found"));
+        course.setStatus("ARCHIVED"); courseRepository.save(course);
+        return ResponseEntity.ok(ApiResponse.success(null, "Course offering archived"));
     }
 
     @GetMapping("/master-data/courses")
@@ -888,6 +1479,7 @@ public class AdminController {
 
     private StudentListItem toStudentItem(Student s, Double attendancePercent) {
         VeSummary ve = veSummary(s);
+        StudentAcademicContext academic = academicContext(s);
         return new StudentListItem(
                 s.getId(),
                 s.getStudentCode(),
@@ -899,8 +1491,22 @@ public class AdminController {
                 1,
                 s.getStatus().name(),
                 attendancePercent == null ? 0.0 : attendancePercent,
-                ve.passed(), ve.status(), ve.taken()
+                ve.passed(), ve.status(), ve.taken(),
+                academic.academicYearId(), academic.academicYearName(), academic.courseId(), academic.groupId()
         );
+    }
+
+    private StudentAcademicContext academicContext(Student student) {
+        return courseStudentRepository.findByStudentId(student.getId()).stream()
+                .filter(enrollment -> enrollment.getCourse() != null && enrollment.getCourse().getAcademicYear() != null)
+                .max(java.util.Comparator.comparing(enrollment -> enrollment.getCreatedAt() == null
+                        ? java.time.LocalDateTime.MIN : enrollment.getCreatedAt()))
+                .map(enrollment -> new StudentAcademicContext(
+                        enrollment.getCourse().getAcademicYear().getId(),
+                        enrollment.getCourse().getAcademicYear().getName(),
+                        enrollment.getCourse().getId(), enrollment.getGroupId()))
+                .orElseGet(() -> new StudentAcademicContext(null,
+                        student.getBatch() == null ? "" : student.getBatch(), null, null));
     }
 
     private VeSummary veSummary(Student student) {
@@ -927,7 +1533,11 @@ public class AdminController {
                 u.getRole().name(),
                 u.getStatus() == AccountStatus.ACTIVE,
                 true,
-                u.getCreatedAt().toString()
+                u.getCreatedAt().toString(),
+                u.getBranch() == null ? null : u.getBranch().getId(),
+                u.getBranch() == null ? null : u.getBranch().getCode(),
+                u.getAcademicYear() == null ? null : u.getAcademicYear().getId(),
+                u.getAcademicYear() == null ? null : u.getAcademicYear().getName()
         );
     }
 
@@ -944,7 +1554,9 @@ public class AdminController {
                 year != null ? year.getName() : "",
                 c.getStatus() != null ? c.getStatus() : "ACTIVE",
                 chapterCount,
-                c.getCreatedAt() == null ? "" : c.getCreatedAt().toString()
+                c.getCreatedAt() == null ? "" : c.getCreatedAt().toString(),
+                c.getSemesterRef() == null ? null : c.getSemesterRef().getId(),
+                c.getSemesterRef() == null ? null : c.getSemesterRef().getName()
         );
     }
 
@@ -976,7 +1588,19 @@ public class AdminController {
 
     private CourseGroupItem toCourseGroupItem(CourseGroup group) {
         UserAccount mentor = group.getMentor();
-        return new CourseGroupItem(group.getId(), group.getName(), mentor == null ? null : mentor.getId(), mentor == null ? null : mentor.getFullName(), mentor == null ? null : mentor.getEmail());
+        UserAccount ta = group.getTeachingAssistant();
+        long studentCount = courseStudentRepository.findByGroupId(group.getId()).stream()
+                .map(enrollment -> studentRepository.findById(enrollment.getStudentId()).orElse(null))
+                .filter(student -> student != null && student.getStatus() == AccountStatus.ACTIVE)
+                .count();
+        return new CourseGroupItem(group.getId(), group.getName(), mentor == null ? null : mentor.getId(), mentor == null ? null : mentor.getFullName(), mentor == null ? null : mentor.getEmail(), ta == null ? null : ta.getId(), ta == null ? null : ta.getFullName(), ta == null ? null : ta.getEmail(), studentCount);
+    }
+
+    private void recordTaAssignment(CourseGroup group, UserAccount ta, String reason) {
+        TeachingAssistantAssignmentHistory history = new TeachingAssistantAssignmentHistory();
+        history.setGroup(group); history.setTeachingAssistant(ta); history.setAssignedBy(authenticatedUserProvider.currentUser());
+        history.setAssignedAt(LocalDateTime.now()); history.setReason(reason); history.setStatus("ACTIVE");
+        taAssignmentHistoryRepository.save(history);
     }
 
     private Long validGroupId(Long courseId, Long groupId) {
@@ -1001,7 +1625,7 @@ public class AdminController {
         if (branchId == null || branchId <= 0) {
             return "General";
         }
-        return branchRepository.findById(branchId).map(Branch::getName).orElse("General");
+        return branchRepository.findById(branchId).map(Branch::getCode).orElse("General");
     }
 
     private String branchCodeForId(Long branchId) {
@@ -1081,28 +1705,34 @@ public class AdminController {
             long totalStudents, long totalFaculty, long totalChapters, long classesConducted,
             double overallAttendancePercentage, String currentAcademicYear,
             long activeCourses, long activeChapters, long upcomingSessions,
-            long completedSessions, long pendingSessionReports
+            long completedSessions, long pendingSessionReports, long activeGroups, long groupsWithoutMentors,
+            long groupsWithoutTas, long activeMentors, long activeTas, long ve1Passed, long ve1Failed
     ) {}
 
     public record StudentListItem(
             long id, String rollNumber, String name, String email,
             Long branchId, String branchName, String branchCode,
             int semester, String status, double attendancePercentage, boolean vePassed,
-            String ve1Status, String ve1Taken
+            String ve1Status, String ve1Taken, Long academicYearId, String academicYearName,
+            Long courseId, Long groupId
     ) {}
 
     private record VeSummary(boolean passed, String status, String taken) {}
+    private record StudentAcademicContext(Long academicYearId, String academicYearName,
+                                          Long courseId, Long groupId) {}
 
     public record FacultyListItem(
             long id, String facultyId, String name, String email,
             String employeeId, String department, String role,
-            boolean active, boolean hasAccount, String createdAt
+            boolean active, boolean hasAccount, String createdAt,
+            Long branchId, String branchCode, Long academicYearId, String academicYearName
     ) {}
 
     public record CourseListItem(
             long id, String name, String code, String courseType,
             int semester, long academicYearId, String academicYearName,
-            String status, int chapterCount, String createdAt
+            String status, int chapterCount, String createdAt,
+            Long semesterId, String semesterName
     ) {}
 
     public record ChapterItem(
@@ -1119,7 +1749,8 @@ public class AdminController {
             long id, String name, String rollNumber, String programme, boolean assigned
     ) {}
 
-    public record BranchItem(long id, String code, String name, boolean active, String createdAt) {}
+    public record BranchItem(long id, String code, String name, boolean active, String createdAt,
+                             Long academicYearId, String academicYearName) {}
     public record RoomItem(long id, String code, boolean active, int displayOrder, String createdAt) {}
 
     public record AcademicYearItem(long id, String name, int startYear, int endYear,
@@ -1137,22 +1768,29 @@ public class AdminController {
 
     public record StudentImportResult(int imported, int skipped, List<String> errors) {}
 
-    public record CreateFacultyRequest(String name, String email, String employeeId, String department, Long courseId, String role, Long groupId) {}
+    public record CreateFacultyRequest(String name, String email, String employeeId, String department,
+                                       Long courseId, String role, Long groupId, Long academicYearId,
+                                       Long semesterId, Long branchId) {}
 
     public record AccountCreateRequest(String role, Boolean sendEmail) {}
 
     public record FacultyStatusRequest(boolean active) {}
 
-    public record CreateBranchRequest(String code, String name) {}
+    public record CreateBranchRequest(String code, String name, Long academicYearId) {}
     public record CreateRoomRequest(String code, Integer displayOrder) {}
 
     public record CreateAcademicYearRequest(String name, Integer startYear, Integer endYear) {}
+    public record SemesterRequest(String name) {}
+    public record SemesterItem(long id, String name, long academicYearId) {}
+    public record CourseCodeRequest(String code, String name) {}
+    public record CourseCodeItem(long id, String code, String name) {}
 
     public record CreateCourseRequest(String name, String code, String courseType, Integer semester,
-                                      Long academicYearId, String groupName, List<String> groups) {}
+                                      Long academicYearId, String groupName, List<String> groups, Long semesterId) {}
 
-    public record CourseGroupRequest(String name, Long mentorId) {}
-    public record CourseGroupItem(long id, String name, Long mentorId, String mentorName, String mentorEmail) {}
+    public record CourseGroupRequest(String name, Long mentorId, Long taId) {}
+    public record CourseGroupItem(long id, String name, Long mentorId, String mentorName, String mentorEmail, Long taId, String taName, String taEmail, long studentCount) {}
+    public record TaAssignmentHistoryItem(long id, long taId, String taName, LocalDateTime assignedAt, LocalDateTime endedAt, String status, String reason) {}
 
     public record CreateChapterRequest(String title, String description) {}
     public record CreateMasterChapterRequest(String title, String description) {}
@@ -1171,4 +1809,8 @@ public class AdminController {
     public record AssignFacultyRequest(List<Long> facultyIds) {}
 
     public record AssignStudentsRequest(List<Long> studentIds) {}
+    public record TransferStudentRequest(Long courseId, Long targetGroupId, String reason) {}
+    public record GroupTransferItem(long id, long courseId, String courseCode, Long previousGroupId,
+                                    String previousGroupName, long newGroupId, String newGroupName,
+                                    String transferredAt, String reason, String performedBy) {}
 }

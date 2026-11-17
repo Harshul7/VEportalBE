@@ -56,7 +56,9 @@ public class ParticipationService {
         List<Student> students = studentRepository.findAll(
                 (root, query, cb) -> cb.equal(root.get("status"), org.example.veportal.entity.AccountStatus.ACTIVE),
                 Sort.by(Sort.Direction.ASC, "fullName"));
-        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId()).stream()
+        List<Long> enrolledIds = (session.getGroup() != null
+                ? courseStudentRepository.findByGroupId(session.getGroup().getId())
+                : courseStudentRepository.findByCourseId(session.getCourse().getId())).stream()
                 .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
 
         String term = search == null ? "" : search.trim().toLowerCase();
@@ -93,7 +95,9 @@ public class ParticipationService {
         for (ParticipationRecord record : participationRepository.findWithStudentBySessionId(session.getId())) {
             existingByStudent.put(record.getStudent().getId(), record);
         }
-        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId()).stream()
+        List<Long> enrolledIds = (session.getGroup() != null
+                ? courseStudentRepository.findByGroupId(session.getGroup().getId())
+                : courseStudentRepository.findByCourseId(session.getCourse().getId())).stream()
                 .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
         for (var entry : request.entries()) {
             Student student = studentRepository.findByStudentCodeIgnoreCase(entry.studentId().trim())

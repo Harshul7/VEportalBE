@@ -29,6 +29,8 @@ public interface ParticipationRecordRepository extends JpaRepository<Participati
 
     Optional<ParticipationRecord> findBySessionIdAndStudentId(Long sessionId, Long studentId);
 
+    boolean existsByStudentId(Long studentId);
+
     @Query("""
             select p from ParticipationRecord p
             join fetch p.session ses

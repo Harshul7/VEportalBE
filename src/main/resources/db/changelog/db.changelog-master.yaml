@@ -77,3 +77,29 @@ databaseChangeLog:
       file: db/changelog/changes/038-activity-scope.yaml
   - include:
       file: db/changelog/changes/039-course-groups.yaml
+  - include:
+      file: db/changelog/changes/040-group-session-ta.yaml
+  - include:
+      file: db/changelog/changes/041-academic-master-group-topics.yaml
+  - include:
+      file: db/changelog/changes/042-seed-course-codes.yaml
+  - include:
+      file: db/changelog/changes/043-group-transfer-history.yaml
+  - include:
+      file: db/changelog/changes/044-group-transfer-actor-fk.yaml
+  - include:
+      file: db/changelog/changes/045-student-course-results.yaml
+  - include:
+      file: db/changelog/changes/046-topic-plan-versions.yaml
+  - include:
+      file: db/changelog/changes/047-ta-assignment-history.yaml
+  - include:
+      file: db/changelog/changes/048-fix-group-topic-plan-unique-key.yaml
+  - include:
+      file: db/changelog/changes/049-branch-academic-year.yaml
+  - include:
+      file: db/changelog/changes/050-normalize-branch-short-names.yaml
+  - include:
+      file: db/changelog/changes/051-user-academic-branch.yaml
+  - include:
+      file: db/changelog/changes/052-ta-history-audit-columns.yaml

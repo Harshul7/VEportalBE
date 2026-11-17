@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record SessionCreateRequest(
         Long courseId,
+        Long groupId,
 
         @Size(max = 255, message = "Title must be at most 255 characters")
         String title,

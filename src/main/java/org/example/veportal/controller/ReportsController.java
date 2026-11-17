@@ -117,6 +117,7 @@ public class ReportsController {
     }
 
     @GetMapping(value = "/students/{id}/performance/export", produces = "text/csv")
+    @PreAuthorize("@resourceAuthorization.canAccessStudent(#id, #courseId)")
     public ResponseEntity<byte[]> exportStudentPerformance(@PathVariable Long id,
                                                             @RequestParam(name = "courseId", required = false) Long courseId,
                                                             @RequestParam(name = "format", defaultValue = "csv") String format) {

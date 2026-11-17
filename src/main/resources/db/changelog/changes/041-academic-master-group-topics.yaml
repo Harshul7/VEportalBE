@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: 041-academic-master-group-topics
+      author: codex
+      changes:
+        - createTable:
+            tableName: academic_semesters
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: updated_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: created_by, type: VARCHAR(120) }
+              - column: { name: updated_by, type: VARCHAR(120) }
+              - column: { name: academic_year_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: name, type: VARCHAR(60), constraints: { nullable: false } }
+              - column: { name: status, type: VARCHAR(20), constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: academic_semesters
+            columnNames: academic_year_id, name
+            constraintName: uq_academic_semester_year_name
+        - addForeignKeyConstraint: { baseTableName: academic_semesters, baseColumnNames: academic_year_id, referencedTableName: academic_years, referencedColumnNames: id, constraintName: fk_academic_semesters_year }
+        - createTable:
+            tableName: course_code_master
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: updated_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: created_by, type: VARCHAR(120) }
+              - column: { name: updated_by, type: VARCHAR(120) }
+              - column: { name: code, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: name, type: VARCHAR(150), constraints: { nullable: false } }
+              - column: { name: status, type: VARCHAR(20), constraints: { nullable: false } }
+        - addUniqueConstraint: { tableName: course_code_master, columnNames: code, constraintName: uq_course_code_master_code }
+        - createTable:
+            tableName: group_topic_plans
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: created_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: updated_at, type: DATETIME, constraints: { nullable: false } }
+              - column: { name: created_by, type: VARCHAR(120) }
+              - column: { name: updated_by, type: VARCHAR(120) }
+              - column: { name: group_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: chapter_id, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: week_number, type: INT, constraints: { nullable: false } }
+              - column: { name: display_order, type: INT, constraints: { nullable: false } }
+              - column: { name: locked, type: BOOLEAN, constraints: { nullable: false } }
+        - addUniqueConstraint: { tableName: group_topic_plans, columnNames: group_id, chapter_id, constraintName: uq_group_topic_plan }
+        - addForeignKeyConstraint: { baseTableName: group_topic_plans, baseColumnNames: group_id, referencedTableName: course_groups, referencedColumnNames: id, constraintName: fk_group_topic_plans_group, onDelete: CASCADE }
+        - addForeignKeyConstraint: { baseTableName: group_topic_plans, baseColumnNames: chapter_id, referencedTableName: chapters, referencedColumnNames: id, constraintName: fk_group_topic_plans_chapter, onDelete: CASCADE }
+        - addColumn:
+            tableName: courses
+            columns:
+              - column: { name: semester_id, type: BIGINT }
+        - addForeignKeyConstraint: { baseTableName: courses, baseColumnNames: semester_id, referencedTableName: academic_semesters, referencedColumnNames: id, constraintName: fk_courses_semester }

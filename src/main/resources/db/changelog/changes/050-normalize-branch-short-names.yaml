@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 050-normalize-branch-short-names
+      author: veportal
+      changes:
+        - update:
+            tableName: branches
+            columns:
+              - column:
+                  name: name
+                  valueComputed: code

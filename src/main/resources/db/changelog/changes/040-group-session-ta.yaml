@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 040-group-session-ta
+      author: codex
+      changes:
+        - addColumn:
+            tableName: course_groups
+            columns:
+              - column: { name: ta_id, type: BIGINT }
+        - addForeignKeyConstraint:
+            baseTableName: course_groups
+            baseColumnNames: ta_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_course_groups_ta
+            onDelete: SET NULL
+        - addColumn:
+            tableName: class_sessions
+            columns:
+              - column: { name: group_id, type: BIGINT }
+        - addForeignKeyConstraint:
+            baseTableName: class_sessions
+            baseColumnNames: group_id
+            referencedTableName: course_groups
+            referencedColumnNames: id
+            constraintName: fk_class_sessions_group
+            onDelete: SET NULL
+        - sql:
+            sql: UPDATE class_sessions s JOIN course_groups g ON g.course_id = s.course_id SET s.group_id = g.id WHERE s.group_id IS NULL

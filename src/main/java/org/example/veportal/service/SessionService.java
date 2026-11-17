@@ -10,10 +10,11 @@ import org.example.veportal.dto.request.SessionCreateRequest;
 import org.example.veportal.dto.response.SessionResponse;
 import org.example.veportal.entity.ClassSession;
 import org.example.veportal.entity.Course;
+import org.example.veportal.entity.CourseGroup;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.entity.UserAccount;
-import org.example.veportal.entity.SessionSupportAssignment;
 import java.time.LocalTime;
+import java.time.LocalDate;
 import org.example.veportal.entity.Role;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.exception.BusinessException;
@@ -23,6 +24,7 @@ import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
+import org.example.veportal.repository.CourseGroupRepository;
 import org.example.veportal.repository.TeachingLogRepository;
 import org.example.veportal.repository.RoomRepository;
 import org.example.veportal.util.Labels;
@@ -45,6 +47,7 @@ public class SessionService {
     private final TeachingLogRepository teachingLogRepository;
     private final CurrentCourseProvider currentCourseProvider;
     private final CourseRepository courseRepository;
+    private final CourseGroupRepository courseGroupRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final SessionMapper sessionMapper;
     private final RoomRepository roomRepository;
@@ -55,6 +58,7 @@ public class SessionService {
                           TeachingLogRepository teachingLogRepository,
                           CurrentCourseProvider currentCourseProvider,
                           CourseRepository courseRepository,
+                          CourseGroupRepository courseGroupRepository,
                           CourseFacultyRepository courseFacultyRepository,
                           SessionMapper sessionMapper,
                           RoomRepository roomRepository) {
@@ -64,6 +68,7 @@ public class SessionService {
         this.teachingLogRepository = teachingLogRepository;
         this.currentCourseProvider = currentCourseProvider;
         this.courseRepository = courseRepository;
+        this.courseGroupRepository = courseGroupRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.sessionMapper = sessionMapper;
         this.roomRepository = roomRepository;
@@ -76,23 +81,37 @@ public class SessionService {
 
     @Transactional(readOnly = true)
     public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status, int page, int size, UserAccount currentUser) {
+        return list(search, status, null, null, null, null, page, size, currentUser);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResult<org.example.veportal.dto.response.SessionListItemResponse> list(String search, String status,
+            Long groupId, LocalDate fromDate, LocalDate toDate, Integer weekNumber, int page, int size,
+            UserAccount currentUser) {
         Specification<ClassSession> spec = (root, query, cb) -> cb.conjunction();
         if (currentUser != null && currentUser.getRole() == Role.TA) {
             spec = spec.and((root, query, cb) -> {
-                var subquery = query.subquery(Long.class);
-                var assignment = subquery.from(SessionSupportAssignment.class);
-                subquery.select(cb.literal(1L));
-                subquery.where(
-                        cb.equal(assignment.get("session").get("id"), root.get("id")),
-                        cb.equal(assignment.get("teachingAssistant").get("id"), currentUser.getId())
-                );
-                return cb.exists(subquery);
+                // A TA's group assignment is the sole operational boundary.
+                // Session-support rows must not grant access to another group's
+                // students or sessions.
+                return cb.equal(root.get("group").get("teachingAssistant").get("id"), currentUser.getId());
             });
         } else if (currentUser != null && !currentUser.getRole().isCoordinator()) {
-            List<Long> courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
-                    .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
-            spec = spec.and((root, query, cb) -> courseIds.isEmpty()
-                    ? cb.disjunction() : root.get("course").get("id").in(courseIds));
+            // The group assignment is the operational access boundary. Do not use
+            // legacy course/faculty mappings here because they can expose sessions
+            // from another group in the same course.
+            List<Long> groupIds = courseGroupRepository.findAll().stream()
+                    .filter(group -> (currentUser.getRole().isMentor()
+                            && group.getMentor() != null
+                            && group.getMentor().getId().equals(currentUser.getId()))
+                            || (currentUser.getRole() == Role.TA
+                            && group.getTeachingAssistant() != null
+                            && group.getTeachingAssistant().getId().equals(currentUser.getId())))
+                    .map(org.example.veportal.entity.CourseGroup::getId)
+                    .toList();
+            spec = spec.and((root, query, cb) -> !groupIds.isEmpty()
+                    ? root.get("group").get("id").in(groupIds)
+                    : cb.disjunction());
         }
         if (search != null && !search.isBlank()) {
             String term = search.trim().toLowerCase();
@@ -109,6 +128,19 @@ public class SessionService {
         if (status != null && !status.isBlank() && !"All".equalsIgnoreCase(status)) {
             SessionStatus statusEnum = Labels.toSessionStatus(status);
             spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), statusEnum));
+        }
+        if (groupId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("group").get("id"), groupId));
+        }
+        if (fromDate != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("sessionDate"), fromDate));
+        }
+        if (toDate != null) {
+            spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("sessionDate"), toDate));
+        }
+        if (weekNumber != null && weekNumber >= 1 && weekNumber <= 53) {
+            spec = spec.and((root, query, cb) -> cb.equal(
+                    cb.function("week", Integer.class, root.get("sessionDate")), weekNumber));
         }
         PageRequest pageRequest = PageRequest.of(Math.max(page, 0), normalizeSize(size),
                 Sort.by(Sort.Direction.DESC, "sessionNumber"));
@@ -138,7 +170,14 @@ public class SessionService {
                     Labels.of(session.getStatus()),
                     attendanceBySession.get(id),
                     materialsBySession.getOrDefault(id, 0L) > 0,
-                    sessionsWithLogs.contains(id)
+                    sessionsWithLogs.contains(id),
+                    session.getGroup() == null ? null : session.getGroup().getId(),
+                    session.getGroup() == null ? "" : session.getGroup().getName(),
+                    session.getGroup() == null ? "" : session.getCourse().getCode() + "-" + session.getGroup().getName().replaceAll("\\s+", "-"),
+                    session.getCourse().getAcademicYear() == null ? "" : session.getCourse().getAcademicYear().getName(),
+                    session.getCourse().getSemesterRef() == null ? (session.getCourse().getSemester() == null ? "" : "Semester " + session.getCourse().getSemester()) : session.getCourse().getSemesterRef().getName(),
+                    session.getGroup() == null || session.getGroup().getTeachingAssistant() == null ? "" : session.getGroup().getTeachingAssistant().getFullName(),
+                    session.getSessionDate().get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())
             );
         }).toList();
 
@@ -152,6 +191,10 @@ public class SessionService {
         if (currentUser.getRole() == Role.TA) {
             throw new org.example.veportal.exception.BusinessException(
                     "Teaching Assistants support sessions but cannot create them");
+        }
+        if (!currentUser.getRole().isCoordinator() && request.groupId() == null) {
+            throw new org.example.veportal.exception.BusinessException(
+                    "Select one of your assigned groups before creating a session");
         }
         validateTimeRange(request.startTime(), request.endTime());
         Course course;
@@ -168,12 +211,29 @@ public class SessionService {
                     : courseRepository.findById(request.courseId())
                         .orElseThrow(() -> NotFoundException.resource("Course", request.courseId()));
         }
-        if (!currentUser.getRole().isCoordinator() && currentUser.getRole() != Role.TA
+        if (!currentUser.getRole().isCoordinator() && request.groupId() == null
                 && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
             throw new org.example.veportal.exception.BusinessException("You are not assigned to this course");
         }
+        CourseGroup group = null;
+        if (request.groupId() != null) {
+            group = courseGroupRepository.findById(request.groupId())
+                    .orElseThrow(() -> NotFoundException.resource("Group", request.groupId()));
+            if (!group.getCourse().getId().equals(course.getId())) {
+                throw new BusinessException("Selected group does not belong to the selected course");
+            }
+            if (!currentUser.getRole().isCoordinator()
+                    && (group.getMentor() == null || !group.getMentor().getId().equals(currentUser.getId()))) {
+                throw new BusinessException("You can only create sessions for your assigned group");
+            }
+            if (sessionRepository.existsScheduleConflict(group.getId(), currentUser.getId(),
+                    LocalDate.parse(request.date()), request.startTime(), request.endTime(), null) > 0) {
+                throw new BusinessException("This group or mentor already has a session scheduled in the selected time range");
+            }
+        }
         ClassSession session = new ClassSession();
         session.setCourse(course);
+        session.setGroup(group);
         session.setSessionNumber(sessionRepository.findMaxSessionNumber(course.getId()) + 1);
         session.setTopic(request.topic().trim());
         session.setTitle(request.title() == null || request.title().isBlank()

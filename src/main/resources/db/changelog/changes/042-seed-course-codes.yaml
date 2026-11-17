@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 042-seed-course-codes
+      author: codex
+      changes:
+        - sql:
+            sql: INSERT INTO course_code_master (created_at, updated_at, code, name, status) SELECT NOW(), NOW(), 'VE1', 'Value Education I', 'ACTIVE' WHERE NOT EXISTS (SELECT 1 FROM course_code_master WHERE code = 'VE1')
+        - sql:
+            sql: INSERT INTO course_code_master (created_at, updated_at, code, name, status) SELECT NOW(), NOW(), 'VE2', 'Value Education II', 'ACTIVE' WHERE NOT EXISTS (SELECT 1 FROM course_code_master WHERE code = 'VE2')

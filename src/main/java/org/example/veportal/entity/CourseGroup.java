@@ -22,10 +22,16 @@ public class CourseGroup extends BaseEntity {
     @JoinColumn(name = "mentor_id")
     private UserAccount mentor;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ta_id")
+    private UserAccount teachingAssistant;
+
     public Course getCourse() { return course; }
     public void setCourse(Course course) { this.course = course; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public UserAccount getMentor() { return mentor; }
     public void setMentor(UserAccount mentor) { this.mentor = mentor; }
+    public UserAccount getTeachingAssistant() { return teachingAssistant; }
+    public void setTeachingAssistant(UserAccount teachingAssistant) { this.teachingAssistant = teachingAssistant; }
 }

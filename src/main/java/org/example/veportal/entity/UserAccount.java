@@ -6,6 +6,9 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
@@ -32,6 +35,14 @@ public class UserAccount extends BaseEntity {
 
     @Column(name = "department", length = 150)
     private String department;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "academic_year_id")
+    private AcademicYear academicYear;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -95,6 +106,11 @@ public class UserAccount extends BaseEntity {
     public void setDepartment(String department) {
         this.department = department;
     }
+
+    public AcademicYear getAcademicYear() { return academicYear; }
+    public void setAcademicYear(AcademicYear academicYear) { this.academicYear = academicYear; }
+    public Branch getBranch() { return branch; }
+    public void setBranch(Branch branch) { this.branch = branch; }
 
     public AccountStatus getStatus() {
         return status;

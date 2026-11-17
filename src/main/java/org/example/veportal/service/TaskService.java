@@ -33,16 +33,18 @@ public class TaskService {
     private final Path storageDirectory;
     private final long maxFileBytes;
     private final ResourceAuthorizationService authorization;
+    private final ActivityService activityService;
 
     public TaskService(SessionTaskRepository taskRepository, TaskDocumentRepository documentRepository,
                        SessionService sessionService, AppProperties properties,
-                       ResourceAuthorizationService authorization) {
+                       ResourceAuthorizationService authorization, ActivityService activityService) {
         this.taskRepository = taskRepository;
         this.documentRepository = documentRepository;
         this.sessionService = sessionService;
         this.storageDirectory = Path.of(properties.storage().materialsDir()).toAbsolutePath().normalize().resolve("tasks");
         this.maxFileBytes = properties.storage().maxFileBytes();
         this.authorization = authorization;
+        this.activityService = activityService;
     }
 
     @Transactional(readOnly = true)
@@ -87,7 +89,13 @@ public class TaskService {
         task.setDescription(request.description() == null ? null : request.description().trim());
         task.setDueDate(request.dueDate());
         applyDates(task, request);
-        return toResponse(taskRepository.save(task));
+        SessionTask saved = taskRepository.save(task);
+        if (saved.getSession().getGroup() != null) {
+            var group = saved.getSession().getGroup();
+            if (group.getMentor() != null) activityService.notifyUser(group.getMentor(), "New group assignment", saved.getTitle(), "/class-sessions/" + sessionId);
+            if (group.getTeachingAssistant() != null) activityService.notifyUser(group.getTeachingAssistant(), "New group assignment", saved.getTitle(), "/class-sessions/" + sessionId);
+        }
+        return toResponse(saved);
     }
 
     @Transactional

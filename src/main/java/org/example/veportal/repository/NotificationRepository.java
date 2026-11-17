@@ -20,4 +20,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             where n.user.id = :userId and n.readAt is null
             """)
     int markAllRead(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("update Notification n set n.readAt = CURRENT_TIMESTAMP where n.id = :id and n.user.id = :userId")
+    int markRead(@Param("id") Long id, @Param("userId") Long userId);
 }

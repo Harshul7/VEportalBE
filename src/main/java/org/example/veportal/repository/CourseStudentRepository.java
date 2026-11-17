@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CourseStudentRepository extends JpaRepository<CourseStudent, CourseStudent.CourseStudentId> {
 
     List<CourseStudent> findByCourseId(Long courseId);
+    List<CourseStudent> findByStudentId(Long studentId);
+    List<CourseStudent> findByGroupId(Long groupId);
     List<CourseStudent> findByGroupIdIn(Collection<Long> groupIds);
 
     boolean existsByCourseIdAndStudentId(Long courseId, Long studentId);

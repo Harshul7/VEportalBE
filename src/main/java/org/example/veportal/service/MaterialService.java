@@ -1,6 +1,7 @@
 package org.example.veportal.service;
 
 import org.example.veportal.dto.PagedResult;
+import jakarta.persistence.criteria.JoinType;
 import org.example.veportal.dto.PageMeta;
 import org.example.veportal.dto.request.MaterialCreateRequest;
 import org.example.veportal.dto.response.MaterialResponse;
@@ -17,6 +18,7 @@ import org.example.veportal.mapper.AcademicMapper;
 import org.example.veportal.repository.ClassSessionRepository;
 import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseRepository;
+import org.example.veportal.repository.CourseGroupRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.util.Labels;
@@ -49,6 +51,7 @@ public class MaterialService {
     private final ChapterRepository chapterRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final CourseRepository courseRepository;
+    private final CourseGroupRepository courseGroupRepository;
     private final Path storageDirectory;
     private final long maxFileBytes;
 
@@ -61,6 +64,7 @@ public class MaterialService {
                            ChapterRepository chapterRepository,
                            CourseFacultyRepository courseFacultyRepository,
                            CourseRepository courseRepository,
+                           CourseGroupRepository courseGroupRepository,
                            AppProperties properties) {
         this.materialRepository = materialRepository;
         this.sessionRepository = sessionRepository;
@@ -71,6 +75,7 @@ public class MaterialService {
         this.chapterRepository = chapterRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.courseRepository = courseRepository;
+        this.courseGroupRepository = courseGroupRepository;
         this.storageDirectory = Path.of(properties.storage().materialsDir()).toAbsolutePath().normalize();
         this.maxFileBytes = properties.storage().maxFileBytes();
     }
@@ -81,8 +86,15 @@ public class MaterialService {
         if (!currentUser.getRole().isCoordinator()) {
             var courseIds = courseFacultyRepository.findByFacultyId(currentUser.getId()).stream()
                     .map(org.example.veportal.entity.CourseFaculty::getCourseId).toList();
-            spec = spec.and((root, query, cb) -> courseIds.isEmpty()
-                    ? cb.disjunction() : root.get("course").get("id").in(courseIds));
+            var groupIds = courseGroupRepository.findAll().stream()
+                    .filter(group -> canAccessGroup(currentUser, group))
+                    .map(org.example.veportal.entity.CourseGroup::getId).toList();
+            spec = spec.and((root, query, cb) -> {
+                var allowed = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+                if (!courseIds.isEmpty()) allowed.add(root.get("course").get("id").in(courseIds));
+                if (!groupIds.isEmpty()) allowed.add(root.join("session", JoinType.LEFT).get("group").get("id").in(groupIds));
+                return allowed.isEmpty() ? cb.disjunction() : cb.or(allowed.toArray(jakarta.persistence.criteria.Predicate[]::new));
+            });
         }
         if (search != null && !search.isBlank()) {
             String pattern = "%" + search.trim().toLowerCase() + "%";
@@ -152,13 +164,13 @@ public class MaterialService {
             session = sessionRepository.findById(parsedSessionId)
                     .orElseThrow(() -> NotFoundException.resource("Session", request.sessionId()));
             course = session.getCourse();
-            if (!currentUser.getRole().isCoordinator()
-                    && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
+            if (!currentUser.getRole().isCoordinator() && !canAccessGroup(currentUser, session.getGroup())) {
                 throw new BusinessException("You are not assigned to this course");
             }
         }
         if (!currentUser.getRole().isCoordinator()
-                && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())) {
+                && !courseFacultyRepository.existsByCourseIdAndFacultyId(course.getId(), currentUser.getId())
+                && courseGroupRepository.findByCourseIdOrderByNameAsc(course.getId()).stream().noneMatch(group -> canAccessGroup(currentUser, group))) {
             throw new BusinessException("You are not assigned to this course");
         }
         CourseMaterial material = new CourseMaterial();
@@ -251,5 +263,12 @@ public class MaterialService {
         Path path = storageDirectory.resolve(material.getStorageKey()).normalize();
         if (!path.startsWith(storageDirectory)) throw new BusinessException("Invalid material storage reference");
         return path;
+    }
+
+    private boolean canAccessGroup(UserAccount user, org.example.veportal.entity.CourseGroup group) {
+        return group != null && ((user.getRole().isMentor() && group.getMentor() != null
+                && group.getMentor().getId().equals(user.getId()))
+                || (user.getRole() == Role.TA && group.getTeachingAssistant() != null
+                && group.getTeachingAssistant().getId().equals(user.getId())));
     }
 }

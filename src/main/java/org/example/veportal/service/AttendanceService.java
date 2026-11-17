@@ -59,8 +59,7 @@ public class AttendanceService {
                 (root, query, cb) -> cb.equal(root.get("status"), org.example.veportal.entity.AccountStatus.ACTIVE),
                 sort);
 
-        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
-                .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
+        List<Long> enrolledIds = enrolledStudentIds(session);
 
         String term = search == null ? "" : search.trim().toLowerCase();
         return students.stream()
@@ -82,8 +81,7 @@ public class AttendanceService {
         for (AttendanceRecord record : attendanceRepository.findWithStudentBySessionId(session.getId())) {
             existingByStudent.put(record.getStudent().getId(), record);
         }
-        List<Long> enrolledIds = courseStudentRepository.findByCourseId(session.getCourse().getId())
-                .stream().map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
+        List<Long> enrolledIds = enrolledStudentIds(session);
         for (var entry : request.entries()) {
             Student student = studentRepository.findByStudentCodeIgnoreCase(entry.studentId().trim())
                     .orElseThrow(() -> NotFoundException.resource("Student", entry.studentId()));
@@ -124,5 +122,14 @@ public class AttendanceService {
             return value;
         }
         return value.substring(0, maxLength - 1) + "…";
+    }
+
+    private List<Long> enrolledStudentIds(ClassSession session) {
+        if (session.getGroup() != null) {
+            return courseStudentRepository.findByGroupId(session.getGroup().getId()).stream()
+                    .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
+        }
+        return courseStudentRepository.findByCourseId(session.getCourse().getId()).stream()
+                .map(org.example.veportal.entity.CourseStudent::getStudentId).toList();
     }
 }

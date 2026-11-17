@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 048-fix-group-topic-plan-unique-key
+      author: codex
+      changes:
+        - createIndex:
+            tableName: group_topic_plans
+            indexName: idx_group_topic_plans_group_id
+            columns:
+              - column: { name: group_id }
+        - dropUniqueConstraint:
+            tableName: group_topic_plans
+            constraintName: uq_group_topic_plan
+        - addUniqueConstraint:
+            tableName: group_topic_plans
+            columnNames: group_id, chapter_id
+            constraintName: uq_group_topic_plan_group_chapter

@@ -22,6 +22,10 @@ public class ClassSession extends BaseEntity {
     private Course course;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private CourseGroup group;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id")
     private Chapter chapter;
 
@@ -74,6 +78,9 @@ public class ClassSession extends BaseEntity {
     public void setCourse(Course course) {
         this.course = course;
     }
+
+    public CourseGroup getGroup() { return group; }
+    public void setGroup(CourseGroup group) { this.group = group; }
 
     public Chapter getChapter() {
         return chapter;

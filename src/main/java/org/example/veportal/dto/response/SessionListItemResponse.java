@@ -17,6 +17,13 @@ public record SessionListItemResponse(
         String status,
         Double attendancePercent,
         boolean hasMaterials,
-        boolean teachingLogSaved
+        boolean teachingLogSaved,
+        Long groupId,
+        String groupName,
+        String groupCode,
+        String academicYear,
+        String semester,
+        String teachingAssistantName,
+        int weekNumber
 ) {
 }

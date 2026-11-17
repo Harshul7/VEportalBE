@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -35,5 +36,13 @@ public class NotificationsController {
     public ResponseEntity<ApiResponse<Void>> markAllRead() {
         notificationService.markAllRead(authenticatedUserProvider.currentUser());
         return ResponseEntity.ok(ApiResponse.success(null, "All notifications marked as read"));
+    }
+
+    @PutMapping("/{notificationId}/read")
+    public ResponseEntity<ApiResponse<Void>> markRead(@PathVariable Long notificationId) {
+        if (!notificationService.markRead(notificationId, authenticatedUserProvider.currentUser())) {
+            return ResponseEntity.status(404).body(ApiResponse.error("Notification not found"));
+        }
+        return ResponseEntity.ok(ApiResponse.success(null, "Notification marked as read"));
     }
 }

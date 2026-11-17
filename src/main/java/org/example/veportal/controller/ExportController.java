@@ -17,6 +17,7 @@ import org.example.veportal.repository.ChapterRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseStudentRepository;
+import org.example.veportal.repository.CourseGroupRepository;
 import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.repository.TopicRepository;
 import org.example.veportal.repository.UserAccountRepository;
@@ -48,6 +49,7 @@ public class ExportController {
     private final ChapterRepository chapterRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final CourseStudentRepository courseStudentRepository;
+    private final CourseGroupRepository courseGroupRepository;
     private final TopicRepository topicRepository;
     private final AcademicYearRepository academicYearRepository;
     private final BranchRepository branchRepository;
@@ -57,6 +59,7 @@ public class ExportController {
                             StudentRepository studentRepository, CourseRepository courseRepository,
                             ChapterRepository chapterRepository, CourseFacultyRepository courseFacultyRepository,
                             CourseStudentRepository courseStudentRepository,
+                            CourseGroupRepository courseGroupRepository,
                             TopicRepository topicRepository,
                             AcademicYearRepository academicYearRepository,
                             BranchRepository branchRepository,
@@ -68,6 +71,7 @@ public class ExportController {
         this.chapterRepository = chapterRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.courseStudentRepository = courseStudentRepository;
+        this.courseGroupRepository = courseGroupRepository;
         this.topicRepository = topicRepository;
         this.academicYearRepository = academicYearRepository;
         this.branchRepository = branchRepository;
@@ -92,12 +96,13 @@ public class ExportController {
     @PreAuthorize("hasAnyRole('GROUP_MENTOR','TA','FACULTY')")
     @Transactional(readOnly = true)
     public ResponseEntity<byte[]> facultyExport(@PathVariable String dataset,
-                                                @RequestParam(defaultValue = "xlsx") String format) {
+                                                @RequestParam(defaultValue = "xlsx") String format,
+                                                @RequestParam(required = false) Long groupId) {
         UserAccount currentUser = authenticatedUserProvider.currentUser();
         List<Course> courses = assignedCourses(currentUser);
         return switch (dataset.toLowerCase()) {
-            case "students" -> createExport("students", "My Course Students", studentHeaders(),
-                    studentRows(assignedStudents(courses)), format);
+            case "students" -> createExport("students", "My Group Students", studentHeaders(),
+                    studentRows(assignedStudents(courses, currentUser, groupId)), format);
             case "academic-structure" -> createExport("academic-structure", "My Academic Structure", academicHeaders(),
                     academicRows(courses, false), format);
             default -> ResponseEntity.notFound().build();
@@ -184,10 +189,16 @@ public class ExportController {
         return courseRepository.findAllById(ids);
     }
 
-    private List<Student> assignedStudents(List<Course> courses) {
+    private List<Student> assignedStudents(List<Course> courses, UserAccount user, Long requestedGroupId) {
         Set<Long> studentIds = new LinkedHashSet<>();
-        for (Course course : courses) {
-            for (CourseStudent enrollment : courseStudentRepository.findByCourseId(course.getId())) {
+        List<Long> authorizedGroups = courseGroupRepository.findAll().stream()
+                .filter(group -> (user.getRole().isMentor() && group.getMentor() != null && group.getMentor().getId().equals(user.getId()))
+                        || (user.getRole() == org.example.veportal.entity.Role.TA && group.getTeachingAssistant() != null && group.getTeachingAssistant().getId().equals(user.getId())))
+                .map(org.example.veportal.entity.CourseGroup::getId)
+                .filter(id -> requestedGroupId == null || id.equals(requestedGroupId))
+                .toList();
+        for (Long authorizedGroup : authorizedGroups) {
+            for (CourseStudent enrollment : courseStudentRepository.findByGroupId(authorizedGroup)) {
                 studentIds.add(enrollment.getStudentId());
             }
         }

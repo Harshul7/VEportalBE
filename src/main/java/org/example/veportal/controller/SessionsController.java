@@ -2,6 +2,7 @@ package org.example.veportal.controller;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.time.LocalDate;
 import org.example.veportal.dto.ApiResponse;
 import org.example.veportal.dto.PagedResult;
 import org.example.veportal.dto.request.SessionCreateRequest;
@@ -37,10 +38,14 @@ public class SessionsController {
     public ResponseEntity<ApiResponse<List<SessionListItemResponse>>> list(
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "groupId", required = false) Long groupId,
+            @RequestParam(name = "fromDate", required = false) LocalDate fromDate,
+            @RequestParam(name = "toDate", required = false) LocalDate toDate,
+            @RequestParam(name = "weekNumber", required = false) Integer weekNumber,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "10") int size) {
-        PagedResult<SessionListItemResponse> result = sessionService.list(search, status, page, size,
-                authenticatedUserProvider.currentUser());
+        PagedResult<SessionListItemResponse> result = sessionService.list(search, status, groupId, fromDate, toDate,
+                weekNumber, page, size, authenticatedUserProvider.currentUser());
         return ResponseEntity.ok(ApiResponse.success(result.content(), "Sessions retrieved", result.pagination()));
     }
 

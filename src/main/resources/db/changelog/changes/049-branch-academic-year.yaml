@@ -1,0 +1,24 @@
+databaseChangeLog:
+  - changeSet:
+      id: 049-branch-academic-year
+      author: veportal
+      changes:
+        - addColumn:
+            tableName: branches
+            columns:
+              - column:
+                  name: academic_year_id
+                  type: bigint
+        - createIndex:
+            tableName: branches
+            indexName: idx_branches_academic_year
+            columns:
+              - column:
+                  name: academic_year_id
+        - addForeignKeyConstraint:
+            baseTableName: branches
+            baseColumnNames: academic_year_id
+            referencedTableName: academic_years
+            referencedColumnNames: id
+            constraintName: fk_branches_academic_year
+            onDelete: SET NULL

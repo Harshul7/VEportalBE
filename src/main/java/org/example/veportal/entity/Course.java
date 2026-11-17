@@ -29,6 +29,10 @@ public class Course extends BaseEntity {
     @Column(name = "semester")
     private Integer semester;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "semester_id")
+    private AcademicSemester semesterRef;
+
     @Column(name = "status", length = 50)
     private String status;
 
@@ -78,6 +82,8 @@ public class Course extends BaseEntity {
     public void setCourseType(String courseType) { this.courseType = courseType; }
     public Integer getSemester() { return semester; }
     public void setSemester(Integer semester) { this.semester = semester; }
+    public AcademicSemester getSemesterRef() { return semesterRef; }
+    public void setSemesterRef(AcademicSemester semesterRef) { this.semesterRef = semesterRef; }
 
     public void setStatus(String status) {
         this.status = status;

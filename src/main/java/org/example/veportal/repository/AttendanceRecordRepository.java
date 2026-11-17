@@ -30,6 +30,8 @@ public interface AttendanceRecordRepository extends JpaRepository<AttendanceReco
 
     Optional<AttendanceRecord> findBySessionIdAndStudentId(Long sessionId, Long studentId);
 
+    boolean existsByStudentId(Long studentId);
+
     @Query("""
             select a from AttendanceRecord a
             join fetch a.session ses
