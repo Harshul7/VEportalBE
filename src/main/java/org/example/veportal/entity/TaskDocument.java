@@ -31,6 +31,9 @@ public class TaskDocument {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "uploaded_by_id", nullable = false)
     private UserAccount uploadedBy;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id")
+    private Student student;
     @Column(name = "uploaded_at", nullable = false)
     private LocalDateTime uploadedAt;
 
@@ -47,6 +50,8 @@ public class TaskDocument {
     public void setSizeBytes(long sizeBytes) { this.sizeBytes = sizeBytes; }
     public UserAccount getUploadedBy() { return uploadedBy; }
     public void setUploadedBy(UserAccount uploadedBy) { this.uploadedBy = uploadedBy; }
+    public Student getStudent() { return student; }
+    public void setStudent(Student student) { this.student = student; }
     public LocalDateTime getUploadedAt() { return uploadedAt; }
     public void setUploadedAt(LocalDateTime uploadedAt) { this.uploadedAt = uploadedAt; }
 }

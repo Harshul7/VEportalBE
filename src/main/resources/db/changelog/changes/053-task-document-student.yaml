@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 053-task-document-student
+      author: veportal
+      comment: Allow group-scoped teaching assistants to attach an externally downloaded submission to a specific student.
+      changes:
+        - addColumn:
+            tableName: task_documents
+            columns:
+              - column: { name: student_id, type: BIGINT }
+        - addForeignKeyConstraint:
+            baseTableName: task_documents
+            baseColumnNames: student_id
+            referencedTableName: students
+            referencedColumnNames: id
+            constraintName: fk_task_documents_student
+            onDelete: SET NULL
+        - createIndex:
+            tableName: task_documents
+            indexName: idx_task_documents_student
+            columns:
+              - column: { name: student_id }

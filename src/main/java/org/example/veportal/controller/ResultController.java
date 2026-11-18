@@ -23,11 +23,32 @@ public class ResultController {
         CourseGroup group=enrollment.getGroupId()==null?null:groups.findById(enrollment.getGroupId()).orElse(null);
         if(!actor.getRole().isCoordinator() && (group==null||group.getMentor()==null||!group.getMentor().getId().equals(actor.getId()))) return ResponseEntity.status(403).body(ApiResponse.error("You can only evaluate students in your assigned group"));
         StudentCourseResult result=results.findByStudentIdAndCourseId(studentId,courseId).orElseGet(StudentCourseResult::new);
+        if (result.getPublishedAt() != null) {
+            return ResponseEntity.status(409).body(ApiResponse.error("This result is already published. Use the authorized correction workflow."));
+        }
         if(result.getEvaluationStatus()==StudentCourseResult.EvaluationStatus.FINALIZED && actor.getRole()!=Role.FACULTY_COORDINATOR && actor.getRole()!=Role.ADMIN)return ResponseEntity.status(403).body(ApiResponse.error("Published results require coordinator correction workflow"));
         result.setStudent(student);result.setCourse(course);result.setGroup(group);result.setEvaluationStatus(StudentCourseResult.EvaluationStatus.valueOf(request.evaluationStatus()));
         result.setFinalResult(request.finalResult()==null?null:StudentCourseResult.FinalResult.valueOf(request.finalResult()));result.setRemarks(request.remarks());result.setEvaluator(actor);
-        if(result.getEvaluationStatus()==StudentCourseResult.EvaluationStatus.FINALIZED){result.setPublisher(actor);result.setPublishedAt(LocalDateTime.now());}
+        if(result.getEvaluationStatus()==StudentCourseResult.EvaluationStatus.FINALIZED && result.getFinalResult() == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("A finalized result must contain PASS or FAIL."));
+        }
         return ResponseEntity.ok(ApiResponse.success(toItem(results.save(result)),"Result saved"));
+    }
+    @PostMapping("/students/{studentId}/courses/{courseId}/publish")
+    @Transactional
+    @PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
+    public ResponseEntity<ApiResponse<ResultItem>> publish(@PathVariable Long studentId, @PathVariable Long courseId) {
+        StudentCourseResult result = results.findByStudentIdAndCourseId(studentId, courseId).orElse(null);
+        if (result == null) return ResponseEntity.notFound().build();
+        if (result.getEvaluationStatus() != StudentCourseResult.EvaluationStatus.FINALIZED || result.getFinalResult() == null) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Finalize the evaluation with PASS or FAIL before publishing."));
+        }
+        if (result.getPublishedAt() != null) {
+            return ResponseEntity.status(409).body(ApiResponse.error("This result is already published."));
+        }
+        result.setPublisher(users.currentUser());
+        result.setPublishedAt(LocalDateTime.now());
+        return ResponseEntity.ok(ApiResponse.success(toItem(results.save(result)), "Result published"));
     }
     @GetMapping("/students/{studentId}/courses/{courseId}") @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<ResultItem>> get(@PathVariable Long studentId,@PathVariable Long courseId){return results.findByStudentIdAndCourseId(studentId,courseId).map(v->ResponseEntity.ok(ApiResponse.success(toItem(v),"Result retrieved"))).orElseGet(()->ResponseEntity.ok(ApiResponse.error("Result not found")));}

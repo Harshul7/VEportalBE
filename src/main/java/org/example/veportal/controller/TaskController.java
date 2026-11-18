@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -64,9 +65,11 @@ public class TaskController {
     }
 
     @PostMapping(value = "/{taskId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId) and hasAnyRole('TEACHING_ASSISTANT','TA','GROUP_MENTOR','FACULTY_COORDINATOR','ADMIN','FACULTY')")
     public ResponseEntity<ApiResponse<TaskResponse>> upload(@PathVariable Long sessionId, @PathVariable Long taskId,
-                                                              @RequestPart("file") MultipartFile file) {
-        return ResponseEntity.ok(ApiResponse.success(taskService.upload(sessionId, taskId, file, users.currentUser()),
+                                                              @RequestPart("file") MultipartFile file,
+                                                              @RequestParam(value = "studentId", required = false) Long studentId) {
+        return ResponseEntity.ok(ApiResponse.success(taskService.upload(sessionId, taskId, file, studentId, users.currentUser()),
                 "Task document uploaded"));
     }
 
@@ -83,6 +86,7 @@ public class TaskController {
     }
 
     @DeleteMapping("/{taskId}/documents/{documentId}")
+    @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId) and hasAnyRole('GROUP_MENTOR','FACULTY_COORDINATOR','ADMIN','FACULTY')")
     public ResponseEntity<ApiResponse<Void>> deleteDocument(@PathVariable Long sessionId, @PathVariable Long taskId,
                                                              @PathVariable Long documentId) {
         taskService.deleteDocument(sessionId, taskId, documentId);

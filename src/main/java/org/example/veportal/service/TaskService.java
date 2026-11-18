@@ -20,6 +20,8 @@ import org.example.veportal.exception.BusinessException;
 import org.example.veportal.exception.NotFoundException;
 import org.example.veportal.repository.SessionTaskRepository;
 import org.example.veportal.repository.TaskDocumentRepository;
+import org.example.veportal.repository.CourseStudentRepository;
+import org.example.veportal.repository.StudentRepository;
 import org.example.veportal.security.ResourceAuthorizationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +36,13 @@ public class TaskService {
     private final long maxFileBytes;
     private final ResourceAuthorizationService authorization;
     private final ActivityService activityService;
+    private final CourseStudentRepository courseStudentRepository;
+    private final StudentRepository studentRepository;
 
     public TaskService(SessionTaskRepository taskRepository, TaskDocumentRepository documentRepository,
                        SessionService sessionService, AppProperties properties,
-                       ResourceAuthorizationService authorization, ActivityService activityService) {
+                       ResourceAuthorizationService authorization, ActivityService activityService,
+                       CourseStudentRepository courseStudentRepository, StudentRepository studentRepository) {
         this.taskRepository = taskRepository;
         this.documentRepository = documentRepository;
         this.sessionService = sessionService;
@@ -45,6 +50,8 @@ public class TaskService {
         this.maxFileBytes = properties.storage().maxFileBytes();
         this.authorization = authorization;
         this.activityService = activityService;
+        this.courseStudentRepository = courseStudentRepository;
+        this.studentRepository = studentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +125,11 @@ public class TaskService {
 
     @Transactional
     public TaskResponse upload(Long sessionId, Long taskId, MultipartFile file, UserAccount user) {
+        return upload(sessionId, taskId, file, null, user);
+    }
+
+    @Transactional
+    public TaskResponse upload(Long sessionId, Long taskId, MultipartFile file, Long studentId, UserAccount user) {
         if (file == null || file.isEmpty()) throw new BusinessException("A non-empty task document is required");
         if (file.getSize() > maxFileBytes) throw new BusinessException("File exceeds the configured size limit");
         SessionTask task = requireForSession(sessionId, taskId);
@@ -138,6 +150,14 @@ public class TaskService {
         }
         TaskDocument document = new TaskDocument();
         document.setTask(task);
+        if (studentId != null) {
+            if (task.getSession().getGroup() == null
+                    || !courseStudentRepository.existsByGroupIdAndStudentId(task.getSession().getGroup().getId(), studentId)) {
+                throw new BusinessException("Selected student is not enrolled in this session's group");
+            }
+            document.setStudent(studentRepository.findById(studentId)
+                    .orElseThrow(() -> NotFoundException.resource("Student", studentId)));
+        }
         document.setFileName(original);
         document.setStorageKey(key);
         document.setContentType(file.getContentType());
@@ -199,7 +219,9 @@ public class TaskService {
     private TaskResponse toResponse(SessionTask task) {
         List<TaskResponse.TaskDocumentResponse> documents = documentRepository.findByTaskIdOrderByUploadedAtDesc(task.getId())
                 .stream().map(d -> new TaskResponse.TaskDocumentResponse(d.getId(), d.getFileName(), d.getContentType(),
-                        d.getSizeBytes(), d.getUploadedBy().getFullName(), d.getUploadedAt())).toList();
+                        d.getSizeBytes(), d.getUploadedBy().getFullName(), d.getUploadedAt(),
+                        d.getStudent() == null ? null : d.getStudent().getId(),
+                        d.getStudent() == null ? null : d.getStudent().getFullName())).toList();
         return new TaskResponse(task.getId(), task.getSession().getId(), task.getTitle(), task.getTaskType(),
                 task.getDescription(), task.getDueDate(), task.getStartDate(), task.getEndDate(), task.getStatus(),
                 task.getCreatedBy(), task.getCreatedAt(), documents);

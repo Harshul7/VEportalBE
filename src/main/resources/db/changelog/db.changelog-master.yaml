@@ -103,3 +103,5 @@ databaseChangeLog:
       file: db/changelog/changes/051-user-academic-branch.yaml
   - include:
       file: db/changelog/changes/052-ta-history-audit-columns.yaml
+  - include:
+      file: db/changelog/changes/053-task-document-student.yaml

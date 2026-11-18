@@ -1510,16 +1510,24 @@ public class AdminController {
     }
 
     private VeSummary veSummary(Student student) {
-        var records = attendanceRepository.findStudentHistory(student.getId(), null).stream()
-                .filter(record -> "VE1".equalsIgnoreCase(record.getSession().getCourse().getCourseType())
-                        || "VE1".equalsIgnoreCase(record.getSession().getCourse().getCode()))
-                .toList();
-        if (records.isEmpty()) return new VeSummary(false, "NOT_TAKEN", "");
-        long present = records.stream().filter(record -> "PRESENT".equals(record.getStatus().name())).count();
-        boolean passed = present * 100.0 / records.size() >= 75.0;
-        var first = records.stream().map(record -> record.getSession().getSessionDate()).min(java.time.LocalDate::compareTo).orElse(null);
-        String year = records.get(0).getSession().getCourse().getAcademicYear() == null ? "" : records.get(0).getSession().getCourse().getAcademicYear().getName();
-        return new VeSummary(passed, passed ? "PASS" : "FAIL", year + (first == null ? "" : " · " + first));
+        var published = studentCourseResultRepository.findByStudentId(student.getId()).stream()
+                .filter(result -> result.getPublishedAt() != null && result.getFinalResult() != null)
+                .filter(result -> result.getCourse() != null
+                        && ("VE1".equalsIgnoreCase(result.getCourse().getCourseType())
+                        || "VE1".equalsIgnoreCase(result.getCourse().getCode())))
+                .max(java.util.Comparator.comparing(StudentCourseResult::getPublishedAt))
+                .orElse(null);
+        if (published != null) {
+            boolean passed = published.getFinalResult() == StudentCourseResult.FinalResult.PASS;
+            return new VeSummary(passed, passed ? "PASS" : "FAIL",
+                    published.getPublishedAt().toLocalDate().toString());
+        }
+
+        boolean hasVe1Activity = attendanceRepository.findStudentHistory(student.getId(), null).stream()
+                .anyMatch(record -> record.getSession() != null && record.getSession().getCourse() != null
+                        && ("VE1".equalsIgnoreCase(record.getSession().getCourse().getCourseType())
+                        || "VE1".equalsIgnoreCase(record.getSession().getCourse().getCode())));
+        return new VeSummary(false, hasVe1Activity ? "IN_PROGRESS" : "NOT_EVALUATED", "");
     }
 
     private FacultyListItem toFacultyItem(UserAccount u) {

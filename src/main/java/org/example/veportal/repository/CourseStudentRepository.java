@@ -11,6 +11,7 @@ public interface CourseStudentRepository extends JpaRepository<CourseStudent, Co
     List<CourseStudent> findByStudentId(Long studentId);
     List<CourseStudent> findByGroupId(Long groupId);
     List<CourseStudent> findByGroupIdIn(Collection<Long> groupIds);
+    boolean existsByGroupIdAndStudentId(Long groupId, Long studentId);
 
     boolean existsByCourseIdAndStudentId(Long courseId, Long studentId);
 

@@ -19,5 +19,6 @@ public record TaskResponse(
         List<TaskDocumentResponse> documents
 ) {
     public record TaskDocumentResponse(Long id, String fileName, String contentType,
-                                       long sizeBytes, String uploadedBy, LocalDateTime uploadedAt) {}
+                                       long sizeBytes, String uploadedBy, LocalDateTime uploadedAt,
+                                       Long studentId, String studentName) {}
 }
