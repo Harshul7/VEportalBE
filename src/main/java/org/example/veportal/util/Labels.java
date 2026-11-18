@@ -75,11 +75,14 @@ public final class Labels {
     }
 
     public static ParticipationLevel toParticipationLevel(String label) {
-        return switch (label) {
-            case "Not Recorded" -> ParticipationLevel.NOT_RECORDED;
-            case "Low" -> ParticipationLevel.LOW;
-            case "Moderate" -> ParticipationLevel.MODERATE;
-            case "High" -> ParticipationLevel.HIGH;
+        if (label == null || label.isBlank()) {
+            throw new BusinessException("Unknown participation level: " + label);
+        }
+        return switch (label.trim().toUpperCase(java.util.Locale.ROOT)) {
+            case "NOT RECORDED", "NOT_RECORDED" -> ParticipationLevel.NOT_RECORDED;
+            case "LOW" -> ParticipationLevel.LOW;
+            case "MODERATE" -> ParticipationLevel.MODERATE;
+            case "HIGH" -> ParticipationLevel.HIGH;
             default -> throw new BusinessException("Unknown participation level: " + label);
         };
     }
@@ -95,12 +98,15 @@ public final class Labels {
     }
 
     public static MaterialType toMaterialType(String label) {
-        return switch (label) {
-            case "Lecture Notes" -> MaterialType.LECTURE_NOTES;
-            case "Slides" -> MaterialType.SLIDES;
-            case "Assignment Brief" -> MaterialType.ASSIGNMENT_BRIEF;
-            case "Reading Material" -> MaterialType.READING_MATERIAL;
-            case "Reference PDF" -> MaterialType.REFERENCE_PDF;
+        if (label == null || label.isBlank()) {
+            throw new BusinessException("Unknown material type: " + label);
+        }
+        return switch (label.trim().toUpperCase(java.util.Locale.ROOT)) {
+            case "LECTURE NOTES", "LECTURE_NOTES" -> MaterialType.LECTURE_NOTES;
+            case "SLIDES" -> MaterialType.SLIDES;
+            case "ASSIGNMENT BRIEF", "ASSIGNMENT_BRIEF" -> MaterialType.ASSIGNMENT_BRIEF;
+            case "READING MATERIAL", "READING_MATERIAL" -> MaterialType.READING_MATERIAL;
+            case "REFERENCE PDF", "REFERENCE_PDF" -> MaterialType.REFERENCE_PDF;
             default -> throw new BusinessException("Unknown material type: " + label);
         };
     }

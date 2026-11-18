@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 055-restore-missing-ve1-chapters
+      author: veportal
+      comment: Restore the canonical 16-chapter VE1 curriculum for VE1 courses that were created without chapters.
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO chapters (course_id, chapter_number, title, description, display_order, status, created_at, updated_at)
+              SELECT target.id, source.chapter_number, source.title, source.description,
+                     source.display_order, 'ACTIVE', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
+              FROM courses target
+              JOIN chapters source
+                ON source.course_id = (
+                  SELECT MIN(canonical.id)
+                  FROM courses canonical
+                  JOIN chapters canonical_chapter ON canonical_chapter.course_id = canonical.id
+                  WHERE canonical.course_type = 'VE1'
+                  GROUP BY canonical.id
+                  HAVING COUNT(*) >= 16
+                  ORDER BY canonical.id
+                  LIMIT 1
+                )
+              WHERE target.course_type = 'VE1'
+                AND NOT EXISTS (
+                  SELECT 1 FROM chapters existing
+                  WHERE existing.course_id = target.id
+                    AND existing.chapter_number = source.chapter_number
+                )

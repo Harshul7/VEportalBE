@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 054-clean-student-academic-data
+      author: veportal
+      comment: Remove student data and academic-year hierarchy data while preserving users and unrelated course/session data.
+      changes:
+        # Remove records whose lifecycle is owned by a student before deleting students.
+        - sql:
+            sql: DELETE FROM attendance_records
+        - sql:
+            sql: DELETE FROM participation_records
+        - sql:
+            sql: DELETE FROM student_course_results
+        - sql:
+            sql: DELETE FROM group_transfer_history
+        - sql:
+            sql: DELETE FROM task_documents WHERE student_id IS NOT NULL
+        - sql:
+            sql: DELETE FROM course_students
+        - sql:
+            sql: DELETE FROM students
+
+        # Courses retain their records; detach the academic hierarchy references first.
+        - sql:
+            sql: UPDATE courses SET semester_id = NULL WHERE semester_id IS NOT NULL
+        - sql:
+            sql: UPDATE courses SET academic_year_id = NULL WHERE academic_year_id IS NOT NULL
+        - sql:
+            sql: UPDATE branches SET academic_year_id = NULL WHERE academic_year_id IS NOT NULL
+        - sql:
+            sql: UPDATE users SET academic_year_id = NULL WHERE academic_year_id IS NOT NULL
+        - sql:
+            sql: DELETE FROM academic_semesters
+        - sql:
+            sql: DELETE FROM academic_years

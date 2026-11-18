@@ -105,3 +105,7 @@ databaseChangeLog:
       file: db/changelog/changes/052-ta-history-audit-columns.yaml
   - include:
       file: db/changelog/changes/053-task-document-student.yaml
+  - include:
+      file: db/changelog/changes/054-clean-student-academic-data.yaml
+  - include:
+      file: db/changelog/changes/055-restore-missing-ve1-chapters.yaml

@@ -15,6 +15,7 @@ import org.example.veportal.dto.response.TaskSearchResponse;
 import org.example.veportal.entity.SessionTask;
 import org.example.veportal.entity.TaskDocument;
 import org.example.veportal.entity.ClassSession;
+import org.example.veportal.entity.Student;
 import org.example.veportal.entity.UserAccount;
 import org.example.veportal.exception.BusinessException;
 import org.example.veportal.exception.NotFoundException;
@@ -129,10 +130,17 @@ public class TaskService {
     }
 
     @Transactional
-    public TaskResponse upload(Long sessionId, Long taskId, MultipartFile file, Long studentId, UserAccount user) {
+    public TaskResponse upload(Long sessionId, Long taskId, MultipartFile file, String studentReference, UserAccount user) {
         if (file == null || file.isEmpty()) throw new BusinessException("A non-empty task document is required");
         if (file.getSize() > maxFileBytes) throw new BusinessException("File exceeds the configured size limit");
         SessionTask task = requireForSession(sessionId, taskId);
+        Student student = resolveStudent(studentReference);
+        if (student != null) {
+            if (task.getSession().getGroup() == null
+                    || !courseStudentRepository.existsByGroupIdAndStudentId(task.getSession().getGroup().getId(), student.getId())) {
+                throw new BusinessException("Selected student is not enrolled in this session's group");
+            }
+        }
         String original = file.getOriginalFilename() == null ? "task-document" :
                 Path.of(file.getOriginalFilename()).getFileName().toString();
         String lower = original.toLowerCase();
@@ -150,14 +158,7 @@ public class TaskService {
         }
         TaskDocument document = new TaskDocument();
         document.setTask(task);
-        if (studentId != null) {
-            if (task.getSession().getGroup() == null
-                    || !courseStudentRepository.existsByGroupIdAndStudentId(task.getSession().getGroup().getId(), studentId)) {
-                throw new BusinessException("Selected student is not enrolled in this session's group");
-            }
-            document.setStudent(studentRepository.findById(studentId)
-                    .orElseThrow(() -> NotFoundException.resource("Student", studentId)));
-        }
+        document.setStudent(student);
         document.setFileName(original);
         document.setStorageKey(key);
         document.setContentType(file.getContentType());
@@ -166,6 +167,20 @@ public class TaskService {
         document.setUploadedAt(LocalDateTime.now());
         documentRepository.save(document);
         return toResponse(task);
+    }
+
+    private Student resolveStudent(String reference) {
+        if (reference == null || reference.isBlank()) return null;
+        String value = reference.trim();
+        try {
+            Long id = Long.valueOf(value);
+            var byId = studentRepository.findById(id);
+            if (byId.isPresent()) return byId.get();
+        } catch (NumberFormatException ignored) {
+            // The UI normally sends the student's roll number, not the database ID.
+        }
+        return studentRepository.findByStudentCodeIgnoreCase(value)
+                .orElseThrow(() -> NotFoundException.resource("Student", reference));
     }
 
     @Transactional

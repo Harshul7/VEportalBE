@@ -68,7 +68,7 @@ public class TaskController {
     @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId) and hasAnyRole('TEACHING_ASSISTANT','TA','GROUP_MENTOR','FACULTY_COORDINATOR','ADMIN','FACULTY')")
     public ResponseEntity<ApiResponse<TaskResponse>> upload(@PathVariable Long sessionId, @PathVariable Long taskId,
                                                               @RequestPart("file") MultipartFile file,
-                                                              @RequestParam(value = "studentId", required = false) Long studentId) {
+                                                              @RequestParam(value = "studentId", required = false) String studentId) {
         return ResponseEntity.ok(ApiResponse.success(taskService.upload(sessionId, taskId, file, studentId, users.currentUser()),
                 "Task document uploaded"));
     }

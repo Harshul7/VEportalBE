@@ -570,6 +570,51 @@ public class AdminController {
                 saved.getTransferredAt().toString(), reason, saved.getPerformedBy().getFullName()), "Student transferred successfully"));
     }
 
+    @PostMapping("/course-groups/{groupId}/students/transfer")
+    @Transactional
+    public ResponseEntity<ApiResponse<BulkGroupTransferResult>> transferStudentsToGroup(
+            @PathVariable Long groupId, @RequestBody BulkGroupTransferRequest request) {
+        CourseGroup target = courseGroupRepository.findById(groupId).orElse(null);
+        List<Long> studentIds = request.studentIds() == null ? List.of() : request.studentIds().stream().distinct().toList();
+        if (target == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Target group not found"));
+        if (studentIds.isEmpty()) return ResponseEntity.ok(ApiResponse.error("Select at least one student to move"));
+        String reason = request.reason() == null || request.reason().isBlank()
+                ? "Administrative bulk group transfer" : request.reason().trim();
+
+        List<CourseStudent> mappings = courseStudentRepository.findByCourseId(target.getCourse().getId()).stream()
+                .filter(mapping -> studentIds.contains(mapping.getStudentId()))
+                .toList();
+        if (mappings.size() != studentIds.size()) {
+            return ResponseEntity.ok(ApiResponse.error("Every selected student must be enrolled in this course offering"));
+        }
+
+        UserAccount actor = authenticatedUserProvider.currentUser();
+        int moved = 0;
+        for (CourseStudent mapping : mappings) {
+            if (groupId.equals(mapping.getGroupId())) continue;
+            CourseGroup previous = mapping.getGroupId() == null ? null
+                    : courseGroupRepository.findById(mapping.getGroupId()).orElse(null);
+            Student student = studentRepository.findById(mapping.getStudentId()).orElse(null);
+            if (student == null) continue;
+            mapping.setGroupId(groupId);
+            courseStudentRepository.save(mapping);
+
+            GroupTransferHistory history = new GroupTransferHistory();
+            history.setStudent(student);
+            history.setCourse(target.getCourse());
+            history.setPreviousGroup(previous);
+            history.setNewGroup(target);
+            history.setTransferredAt(LocalDateTime.now());
+            history.setReason(reason);
+            history.setPerformedBy(actor);
+            groupTransferHistoryRepository.save(history);
+            moved++;
+        }
+        return ResponseEntity.ok(ApiResponse.success(
+                new BulkGroupTransferResult(studentIds.size(), moved, studentIds.size() - moved, target.getId(), target.getName()),
+                moved == 0 ? "All selected students are already in this group" : "Students moved successfully"));
+    }
+
     @GetMapping("/students/{id}/performance")
     public ResponseEntity<ApiResponse<StudentPerformance>> studentPerformance(@PathVariable Long id) {
         Student s = studentRepository.findById(id).orElse(null);
@@ -1113,6 +1158,7 @@ public class AdminController {
     }
 
     @PutMapping("/course-groups/{groupId}")
+    @Transactional
     public ResponseEntity<ApiResponse<CourseGroupItem>> updateCourseGroup(@PathVariable Long groupId, @RequestBody CourseGroupRequest request) {
         CourseGroup group = courseGroupRepository.findById(groupId).orElse(null);
         if (group == null) return ResponseEntity.ok(ApiResponse.error("Group not found"));
@@ -1126,7 +1172,19 @@ public class AdminController {
             group.setMentor(mentor);
         }
         UserAccount previousTa = group.getTeachingAssistant();
-        if (request.taId() == null) group.setTeachingAssistant(null); else {
+        if (request.taId() == null) {
+            if (previousTa != null) {
+                taAssignmentHistoryRepository.findByGroupIdOrderByAssignedAtDesc(groupId).stream()
+                        .filter(h -> "ACTIVE".equals(h.getStatus()) && h.getEndedAt() == null)
+                        .findFirst()
+                        .ifPresent(h -> {
+                            h.setEndedAt(LocalDateTime.now());
+                            h.setStatus("ENDED");
+                            taAssignmentHistoryRepository.save(h);
+                        });
+            }
+            group.setTeachingAssistant(null);
+        } else {
             UserAccount ta = userAccountRepository.findById(request.taId()).orElse(null);
             if (ta == null || ta.getRole() != Role.TA) return ResponseEntity.ok(ApiResponse.error("Selected teaching assistant was not found"));
             if (group.getTeachingAssistant() != null && !group.getTeachingAssistant().getId().equals(ta.getId())) {
@@ -1447,8 +1505,15 @@ public class AdminController {
                 .stream().map(CourseStudent::getStudentId).toList();
         List<StudentAssignmentItem> items = studentRepository.findAll(Sort.by(Sort.Direction.ASC, "fullName"))
                 .stream()
-                .map(s -> new StudentAssignmentItem(s.getId(), s.getFullName(), s.getStudentCode(),
-                        s.getProgramme(), assignedIds.contains(s.getId())))
+                .map(s -> {
+                    CourseStudent assignment = courseStudentRepository.findByCourseId(courseId).stream()
+                            .filter(item -> item.getStudentId().equals(s.getId())).findFirst().orElse(null);
+                    CourseGroup group = assignment == null || assignment.getGroupId() == null ? null
+                            : courseGroupRepository.findById(assignment.getGroupId()).orElse(null);
+                    return new StudentAssignmentItem(s.getId(), s.getFullName(), s.getStudentCode(),
+                            s.getProgramme(), assignment != null, group == null ? null : group.getId(),
+                            group == null ? null : group.getName());
+                })
                 .toList();
         return ResponseEntity.ok(ApiResponse.success(items, "Course students retrieved"));
     }
@@ -1498,7 +1563,7 @@ public class AdminController {
                 s.getStatus().name(),
                 attendancePercent == null ? 0.0 : attendancePercent,
                 ve.passed(), ve.status(), ve.taken(),
-                academic.academicYearId(), academic.academicYearName(), academic.courseId(), academic.groupId()
+                academic.academicYearId(), academic.academicYearName(), academic.courseId(), academic.groupId(), academic.groupName()
         );
     }
 
@@ -1510,9 +1575,10 @@ public class AdminController {
                 .map(enrollment -> new StudentAcademicContext(
                         enrollment.getCourse().getAcademicYear().getId(),
                         enrollment.getCourse().getAcademicYear().getName(),
-                        enrollment.getCourse().getId(), enrollment.getGroupId()))
+                        enrollment.getCourse().getId(), enrollment.getGroupId(),
+                        enrollment.getGroupId() == null ? null : courseGroupRepository.findById(enrollment.getGroupId()).map(CourseGroup::getName).orElse(null)))
                 .orElseGet(() -> new StudentAcademicContext(null,
-                        student.getBatch() == null ? "" : student.getBatch(), null, null));
+                        student.getBatch() == null ? "" : student.getBatch(), null, null, null));
     }
 
     private VeSummary veSummary(Student student) {
@@ -1728,12 +1794,12 @@ public class AdminController {
             Long branchId, String branchName, String branchCode,
             int semester, String status, double attendancePercentage, boolean vePassed,
             String ve1Status, String ve1Taken, Long academicYearId, String academicYearName,
-            Long courseId, Long groupId
+            Long courseId, Long groupId, String groupName
     ) {}
 
     private record VeSummary(boolean passed, String status, String taken) {}
     private record StudentAcademicContext(Long academicYearId, String academicYearName,
-                                          Long courseId, Long groupId) {}
+                                          Long courseId, Long groupId, String groupName) {}
 
     public record FacultyListItem(
             long id, String facultyId, String name, String email,
@@ -1760,7 +1826,8 @@ public class AdminController {
     ) {}
 
     public record StudentAssignmentItem(
-            long id, String name, String rollNumber, String programme, boolean assigned
+            long id, String name, String rollNumber, String programme, boolean assigned,
+            Long groupId, String groupName
     ) {}
 
     public record BranchItem(long id, String code, String name, boolean active, String createdAt,
@@ -1824,6 +1891,8 @@ public class AdminController {
 
     public record AssignStudentsRequest(List<Long> studentIds) {}
     public record TransferStudentRequest(Long courseId, Long targetGroupId, String reason) {}
+    public record BulkGroupTransferRequest(List<Long> studentIds, String reason) {}
+    public record BulkGroupTransferResult(int requested, int moved, int alreadyInTarget, long targetGroupId, String targetGroupName) {}
     public record GroupTransferItem(long id, long courseId, String courseCode, Long previousGroupId,
                                     String previousGroupName, long newGroupId, String newGroupName,
                                     String transferredAt, String reason, String performedBy) {}
