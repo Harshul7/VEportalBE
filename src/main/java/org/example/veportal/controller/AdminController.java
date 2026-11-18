@@ -190,10 +190,6 @@ public class AdminController {
             @RequestParam(required = false) Long groupId,
             @RequestParam(required = false) LocalDate fromDate,
             @RequestParam(required = false) LocalDate toDate) {
-        long totalStudents = studentRepository.count();
-        long totalFaculty = userAccountRepository.findAll().stream()
-                .filter(u -> u.getRole().isMentor() || u.getRole() == Role.TA)
-                .count();
         var filteredCourses = courseRepository.findAll().stream()
                 .filter(c -> "ACTIVE".equalsIgnoreCase(c.getStatus()))
                 .filter(c -> academicYearId == null || (c.getAcademicYear() != null && academicYearId.equals(c.getAcademicYear().getId())))
@@ -201,11 +197,21 @@ public class AdminController {
         var filteredCourseIds = filteredCourses.stream().map(Course::getId).collect(java.util.stream.Collectors.toSet());
         var filteredGroups = courseGroupRepository.findAll().stream().filter(g -> filteredCourseIds.contains(g.getCourse().getId())).filter(g -> groupId == null || groupId.equals(g.getId())).toList();
         var filteredGroupIds = filteredGroups.stream().map(CourseGroup::getId).collect(java.util.stream.Collectors.toSet());
+        List<Long> filteredStudentIds = (groupId != null
+                ? courseStudentRepository.findByGroupIdIn(filteredGroupIds)
+                : filteredCourseIds.stream().flatMap(id -> courseStudentRepository.findByCourseId(id).stream()).toList())
+                .stream().map(CourseStudent::getStudentId).distinct().toList();
+        long totalStudents = filteredStudentIds.size();
+        long totalFaculty = userAccountRepository.findAll().stream()
+                .filter(u -> u.getRole().isMentor() || u.getRole() == Role.TA)
+                .count();
         var filteredSessions = sessionRepository.findAll().stream().filter(s -> filteredCourseIds.contains(s.getCourse().getId())).filter(s -> groupId == null || (s.getGroup() != null && filteredGroupIds.contains(s.getGroup().getId()))).filter(s -> fromDate == null || !s.getSessionDate().isBefore(fromDate)).filter(s -> toDate == null || !s.getSessionDate().isAfter(toDate)).toList();
         long activeCourses = filteredCourses.size();
         long classesConducted = filteredSessions.stream().filter(s -> s.getStatus() == SessionStatus.COMPLETED).count();
         long upcomingSessions = filteredSessions.stream().filter(s -> s.getStatus() == SessionStatus.SCHEDULED || s.getStatus() == SessionStatus.UPCOMING).count();
-        long pendingReports = Math.max(0, classesConducted - teachingLogRepository.count());
+        List<Long> sessionIds = filteredSessions.stream().map(s -> s.getId()).toList();
+        long sessionsWithLogs = sessionIds.isEmpty() ? 0 : teachingLogRepository.findSessionIdsWithLogs(sessionIds).stream().distinct().count();
+        long pendingReports = Math.max(0, classesConducted - sessionsWithLogs);
         long totalAttendance = filteredSessions.stream().flatMap(s -> attendanceRepository.findWithStudentBySessionId(s.getId()).stream()).count();
         long presentAttendance = filteredSessions.stream().flatMap(s -> attendanceRepository.findWithStudentBySessionId(s.getId()).stream()).filter(a -> a.getStatus() == org.example.veportal.entity.AttendanceStatus.PRESENT).count();
         double attendancePercent = totalAttendance == 0 ? 0.0 : presentAttendance * 100.0 / totalAttendance;
@@ -219,8 +225,8 @@ public class AdminController {
                 upcomingSessions, classesConducted, pendingReports,
                 filteredGroups.size(), filteredGroups.stream().filter(g -> g.getMentor() == null).count(), filteredGroups.stream().filter(g -> g.getTeachingAssistant() == null).count(),
                 userAccountRepository.findAll().stream().filter(u -> u.getRole().isMentor() && u.getStatus() == AccountStatus.ACTIVE).count(), userAccountRepository.findAll().stream().filter(u -> u.getRole() == Role.TA && u.getStatus() == AccountStatus.ACTIVE).count(),
-                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && r.getFinalResult() == StudentCourseResult.FinalResult.PASS).count(),
-                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && r.getFinalResult() == StudentCourseResult.FinalResult.FAIL).count()
+                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && filteredStudentIds.contains(r.getStudent().getId()) && r.getPublishedAt() != null && r.getFinalResult() == StudentCourseResult.FinalResult.PASS).count(),
+                studentCourseResultRepository.findAll().stream().filter(r -> filteredCourseIds.contains(r.getCourse().getId()) && filteredStudentIds.contains(r.getStudent().getId()) && r.getPublishedAt() != null && r.getFinalResult() == StudentCourseResult.FinalResult.FAIL).count()
         );
         return ResponseEntity.ok(ApiResponse.success(stats, "Dashboard stats retrieved"));
     }

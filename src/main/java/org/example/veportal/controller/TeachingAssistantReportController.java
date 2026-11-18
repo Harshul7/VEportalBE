@@ -8,6 +8,7 @@ import org.example.veportal.security.AuthenticatedUserProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 @RestController @RequestMapping("/api/ta") @PreAuthorize("hasRole('TA')")
 public class TeachingAssistantReportController {
@@ -15,6 +16,7 @@ public class TeachingAssistantReportController {
     private final ClassSessionRepository sessions; private final AttendanceRecordRepository attendance; private final SessionTaskRepository tasks;
     public TeachingAssistantReportController(AuthenticatedUserProvider u, CourseGroupRepository g, CourseStudentRepository s, ClassSessionRepository c, AttendanceRecordRepository a, SessionTaskRepository t){users=u;groups=g;students=s;sessions=c;attendance=a;tasks=t;}
     @GetMapping("/report")
+    @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<TaReport>> report(@RequestParam(required=false) Long groupId){
         UserAccount user=users.currentUser(); List<CourseGroup> assigned=groups.findAll().stream().filter(g->g.getTeachingAssistant()!=null&&g.getTeachingAssistant().getId().equals(user.getId())).toList();
         if(groupId!=null) assigned=assigned.stream().filter(g->g.getId().equals(groupId)).toList();
