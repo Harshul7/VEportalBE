@@ -25,6 +25,7 @@ import org.example.veportal.repository.CourseMaterialRepository;
 import org.example.veportal.repository.CourseFacultyRepository;
 import org.example.veportal.repository.CourseRepository;
 import org.example.veportal.repository.CourseGroupRepository;
+import org.example.veportal.repository.GroupTopicPlanRepository;
 import org.example.veportal.repository.TeachingLogRepository;
 import org.example.veportal.repository.RoomRepository;
 import org.example.veportal.util.Labels;
@@ -48,6 +49,7 @@ public class SessionService {
     private final CurrentCourseProvider currentCourseProvider;
     private final CourseRepository courseRepository;
     private final CourseGroupRepository courseGroupRepository;
+    private final GroupTopicPlanRepository groupTopicPlanRepository;
     private final CourseFacultyRepository courseFacultyRepository;
     private final SessionMapper sessionMapper;
     private final RoomRepository roomRepository;
@@ -59,6 +61,7 @@ public class SessionService {
                           CurrentCourseProvider currentCourseProvider,
                           CourseRepository courseRepository,
                           CourseGroupRepository courseGroupRepository,
+                          GroupTopicPlanRepository groupTopicPlanRepository,
                           CourseFacultyRepository courseFacultyRepository,
                           SessionMapper sessionMapper,
                           RoomRepository roomRepository) {
@@ -69,6 +72,7 @@ public class SessionService {
         this.currentCourseProvider = currentCourseProvider;
         this.courseRepository = courseRepository;
         this.courseGroupRepository = courseGroupRepository;
+        this.groupTopicPlanRepository = groupTopicPlanRepository;
         this.courseFacultyRepository = courseFacultyRepository;
         this.sessionMapper = sessionMapper;
         this.roomRepository = roomRepository;
@@ -177,13 +181,22 @@ public class SessionService {
                     session.getCourse().getAcademicYear() == null ? "" : session.getCourse().getAcademicYear().getName(),
                     session.getCourse().getSemesterRef() == null ? (session.getCourse().getSemester() == null ? "" : "Semester " + session.getCourse().getSemester()) : session.getCourse().getSemesterRef().getName(),
                     session.getGroup() == null || session.getGroup().getTeachingAssistant() == null ? "" : session.getGroup().getTeachingAssistant().getFullName(),
-                    session.getSessionDate().get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())
+                    academicWeek(session)
             );
         }).toList();
 
         PageMeta meta = new PageMeta(result.getNumber(), result.getSize(), result.getTotalElements(),
                 result.getTotalPages());
         return new PagedResult<>(items, meta);
+    }
+
+    private int academicWeek(ClassSession session) {
+        if (session.getGroup() != null && session.getChapter() != null) {
+            return groupTopicPlanRepository.findByGroupIdAndChapterId(session.getGroup().getId(), session.getChapter().getId())
+                    .map(plan -> plan.getWeekNumber() == null ? 1 : plan.getWeekNumber())
+                    .orElseGet(() -> session.getSessionDate().get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()));
+        }
+        return session.getSessionDate().get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear());
     }
 
     @Transactional
