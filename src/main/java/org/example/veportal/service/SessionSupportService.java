@@ -49,7 +49,7 @@ public class SessionSupportService {
         UserAccount ta = users.findById(request.teachingAssistantId())
                 .orElseThrow(() -> NotFoundException.resource("Teaching Assistant", request.teachingAssistantId()));
         if (ta.getRole() != Role.TA) throw new BusinessException("Only a Teaching Assistant can be assigned as session support");
-        if (!actor.getRole().isCoordinator() && !courseFaculty.existsByCourseIdAndFacultyId(session.getCourse().getId(), actor.getId())) {
+        if (!actor.getRole().isCoordinator() && !canManageSessionSupport(session, actor)) {
             throw new BusinessException("You are not assigned to this course");
         }
         if (!actor.getRole().isCoordinator() && !courseFaculty.existsByCourseIdAndFacultyId(session.getCourse().getId(), ta.getId())) {
@@ -66,10 +66,18 @@ public class SessionSupportService {
     @Transactional
     public void remove(Long sessionId, Long taId, UserAccount actor) {
         var session = sessions.requireSession(sessionId);
-        if (!actor.getRole().isCoordinator() && !courseFaculty.existsByCourseIdAndFacultyId(session.getCourse().getId(), actor.getId())) {
+        if (!actor.getRole().isCoordinator() && !canManageSessionSupport(session, actor)) {
             throw new BusinessException("You are not assigned to this course");
         }
         assignments.deleteBySessionIdAndTeachingAssistantId(sessionId, taId);
+    }
+
+    private boolean canManageSessionSupport(org.example.veportal.entity.ClassSession session, UserAccount actor) {
+        return courseFaculty.existsByCourseIdAndFacultyId(session.getCourse().getId(), actor.getId())
+                || (session.getFaculty() != null && session.getFaculty().getId().equals(actor.getId()))
+                || (session.getGroup() != null
+                && session.getGroup().getMentor() != null
+                && session.getGroup().getMentor().getId().equals(actor.getId()));
     }
 
     private SessionSupportResponse toResponse(SessionSupportAssignment item) {
