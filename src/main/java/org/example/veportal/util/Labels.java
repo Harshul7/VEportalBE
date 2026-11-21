@@ -125,6 +125,7 @@ public final class Labels {
             case LOG -> "log";
             case MATERIAL -> "material";
             case PARTICIPATION -> "participation";
+            case TASK -> "task";
         };
     }
 }

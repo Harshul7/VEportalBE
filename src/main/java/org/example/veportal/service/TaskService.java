@@ -89,7 +89,7 @@ public class TaskService {
     }
 
     @Transactional
-    public TaskResponse create(Long sessionId, TaskCreateRequest request) {
+    public TaskResponse create(Long sessionId, TaskCreateRequest request, UserAccount actor) {
         SessionTask task = new SessionTask();
         task.setSession(sessionService.requireSession(sessionId));
         task.setTitle(request.title().trim());
@@ -100,6 +100,10 @@ public class TaskService {
         SessionTask saved = taskRepository.save(task);
         if (saved.getSession().getGroup() != null) {
             var group = saved.getSession().getGroup();
+            activityService.record(actor, org.example.veportal.entity.ActivityKind.TASK,
+                    "Task assigned: " + saved.getTitle(),
+                    "Assigned to " + group.getName() + " by " + actor.getFullName(),
+                    "/tasks", group.getName(), saved.getSession().getCourse());
             if (group.getMentor() != null) activityService.notifyUser(group.getMentor(), "New group assignment", saved.getTitle(), "/class-sessions/" + sessionId);
             if (group.getTeachingAssistant() != null) activityService.notifyUser(group.getTeachingAssistant(), "New group assignment", saved.getTitle(), "/class-sessions/" + sessionId);
         }

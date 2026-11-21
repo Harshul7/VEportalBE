@@ -4,5 +4,6 @@ public enum ActivityKind {
     ATTENDANCE,
     LOG,
     MATERIAL,
-    PARTICIPATION
+    PARTICIPATION,
+    TASK
 }

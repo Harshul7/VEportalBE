@@ -47,7 +47,7 @@ public class TaskController {
     @PreAuthorize("@resourceAuthorization.canAccessSession(#sessionId) and hasAnyRole('FACULTY_COORDINATOR','ADMIN','GROUP_MENTOR','FACULTY')")
     public ResponseEntity<ApiResponse<TaskResponse>> create(@PathVariable Long sessionId,
                                                              @Valid @RequestBody TaskCreateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(taskService.create(sessionId, request), "Task created"));
+        return ResponseEntity.ok(ApiResponse.success(taskService.create(sessionId, request, users.currentUser()), "Task created"));
     }
 
     @PutMapping("/{taskId}")
