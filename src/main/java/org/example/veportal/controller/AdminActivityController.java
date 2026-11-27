@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/activity")
+@RequestMapping("/api/admin/audit")
 @PreAuthorize("hasAnyRole('FACULTY_COORDINATOR','ADMIN')")
 public class AdminActivityController {
     private final AdminActivityService activityService;

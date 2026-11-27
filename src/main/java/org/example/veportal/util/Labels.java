@@ -126,6 +126,7 @@ public final class Labels {
             case MATERIAL -> "material";
             case PARTICIPATION -> "participation";
             case TASK -> "task";
+            case GROUP_MAPPING -> "group mapping";
         };
     }
 }

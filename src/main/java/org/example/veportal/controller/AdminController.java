@@ -53,6 +53,7 @@ import org.example.veportal.repository.GroupTransferHistoryRepository;
 import org.example.veportal.repository.TeachingAssistantAssignmentHistoryRepository;
 import org.example.veportal.repository.StudentCourseResultRepository;
 import org.example.veportal.repository.ParticipationRecordRepository;
+import org.example.veportal.repository.ActivityLogRepository;
 import org.example.veportal.security.AuthenticatedUserProvider;
 import org.example.veportal.entity.GroupTransferHistory;
 import org.example.veportal.entity.TeachingAssistantAssignmentHistory;
@@ -60,6 +61,9 @@ import org.example.veportal.entity.StudentCourseResult;
 import org.example.veportal.entity.SessionStatus;
 import org.example.veportal.service.MailService;
 import org.example.veportal.service.AuthService;
+import org.example.veportal.service.ActivityService;
+import org.example.veportal.entity.ActivityKind;
+import org.example.veportal.entity.ActivityLog;
 import org.example.veportal.util.Percent;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -122,6 +126,8 @@ public class AdminController {
     private final GroupTopicPlanRepository groupTopicPlanRepository;
     private final AuthenticatedUserProvider authenticatedUserProvider;
     private final AppProperties appProperties;
+    private final ActivityService activityService;
+    private final ActivityLogRepository activityLogRepository;
 
     public AdminController(UserAccountRepository userAccountRepository,
                            CourseRepository courseRepository,
@@ -151,7 +157,9 @@ public class AdminController {
                            ParticipationRecordRepository participationRecordRepository,
                            GroupTopicPlanRepository groupTopicPlanRepository,
                            AuthenticatedUserProvider authenticatedUserProvider,
-                           AppProperties appProperties) {
+                           AppProperties appProperties,
+                           ActivityService activityService,
+                           ActivityLogRepository activityLogRepository) {
         this.userAccountRepository = userAccountRepository;
         this.courseRepository = courseRepository;
         this.sessionRepository = sessionRepository;
@@ -181,6 +189,8 @@ public class AdminController {
         this.groupTopicPlanRepository = groupTopicPlanRepository;
         this.authenticatedUserProvider = authenticatedUserProvider;
         this.appProperties = appProperties;
+        this.activityService = activityService;
+        this.activityLogRepository = activityLogRepository;
     }
 
     @GetMapping("/dashboard")
@@ -1136,6 +1146,17 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success(taAssignmentHistoryRepository.findByGroupIdOrderByAssignedAtDesc(groupId).stream().map(h -> new TaAssignmentHistoryItem(h.getId(), h.getTeachingAssistant().getId(), h.getTeachingAssistant().getFullName(), h.getAssignedAt(), h.getEndedAt(), h.getStatus(), h.getReason())).toList(), "TA assignment history retrieved"));
     }
 
+    @GetMapping("/course-groups/{groupId}/assignment-timeline")
+    public ResponseEntity<ApiResponse<List<GroupAssignmentTimelineItem>>> assignmentTimeline(@PathVariable Long groupId) {
+        CourseGroup group = courseGroupRepository.findById(groupId).orElse(null);
+        if (group == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error("Group not found"));
+        List<GroupAssignmentTimelineItem> timeline = activityLogRepository
+                .findByKindAndGroupNameAndCourseIdOrderByCreatedAtDesc(ActivityKind.GROUP_MAPPING, group.getName(), group.getCourse().getId())
+                .stream().map(log -> new GroupAssignmentTimelineItem(log.getId(), log.getCreatedAt(), log.getContextText(), log.getUser() == null ? "System" : log.getUser().getFullName()))
+                .toList();
+        return ResponseEntity.ok(ApiResponse.success(timeline, "Group assignment timeline retrieved"));
+    }
+
     @PostMapping("/courses/{courseId}/groups")
     public ResponseEntity<ApiResponse<CourseGroupItem>> createCourseGroup(@PathVariable Long courseId, @RequestBody CourseGroupRequest request) {
         Course course = courseRepository.findById(courseId).orElse(null);
@@ -1162,6 +1183,7 @@ public class AdminController {
     public ResponseEntity<ApiResponse<CourseGroupItem>> updateCourseGroup(@PathVariable Long groupId, @RequestBody CourseGroupRequest request) {
         CourseGroup group = courseGroupRepository.findById(groupId).orElse(null);
         if (group == null) return ResponseEntity.ok(ApiResponse.error("Group not found"));
+        UserAccount previousMentor = group.getMentor();
         String name = request.name() == null ? "" : request.name().trim();
         if (name.isBlank()) return ResponseEntity.ok(ApiResponse.error("Group name is required"));
         if (courseGroupRepository.findByCourseIdAndNameIgnoreCase(group.getCourse().getId(), name).filter(existing -> !existing.getId().equals(groupId)).isPresent()) return ResponseEntity.ok(ApiResponse.error("This group already exists for the course"));
@@ -1194,6 +1216,19 @@ public class AdminController {
         }
         CourseGroup savedGroup = courseGroupRepository.save(group);
         if (savedGroup.getTeachingAssistant() != null && (previousTa == null || !previousTa.getId().equals(savedGroup.getTeachingAssistant().getId()))) recordTaAssignment(savedGroup, savedGroup.getTeachingAssistant(), "Group assignment updated");
+        boolean mentorChanged = !sameUser(previousMentor, savedGroup.getMentor());
+        boolean taChanged = !sameUser(previousTa, savedGroup.getTeachingAssistant());
+        if (mentorChanged || taChanged) {
+            StringBuilder changes = new StringBuilder();
+            if (mentorChanged) changes.append("Group Mentor: ").append(displayName(previousMentor)).append(" → ").append(displayName(savedGroup.getMentor()));
+            if (taChanged) {
+                if (changes.length() > 0) changes.append("; ");
+                changes.append("Teaching Assistant: ").append(displayName(previousTa)).append(" → ").append(displayName(savedGroup.getTeachingAssistant()));
+            }
+            activityService.record(authenticatedUserProvider.currentUser(), ActivityKind.GROUP_MAPPING,
+                    "Group mapping updated", changes.toString(), "/admin/mapping?groupId=" + groupId,
+                    savedGroup.getName(), savedGroup.getCourse());
+        }
         return ResponseEntity.ok(ApiResponse.success(toCourseGroupItem(savedGroup), "Group updated"));
     }
 
@@ -1683,6 +1718,14 @@ public class AdminController {
         taAssignmentHistoryRepository.save(history);
     }
 
+    private boolean sameUser(UserAccount first, UserAccount second) {
+        return first == null ? second == null : second != null && first.getId().equals(second.getId());
+    }
+
+    private String displayName(UserAccount user) {
+        return user == null ? "Not assigned" : user.getFullName();
+    }
+
     private Long validGroupId(Long courseId, Long groupId) {
         if (groupId == null) return null;
         return courseGroupRepository.findById(groupId).filter(group -> group.getCourse().getId().equals(courseId)).map(CourseGroup::getId).orElse(null);
@@ -1872,6 +1915,7 @@ public class AdminController {
     public record CourseGroupRequest(String name, Long mentorId, Long taId) {}
     public record CourseGroupItem(long id, String name, Long mentorId, String mentorName, String mentorEmail, Long taId, String taName, String taEmail, long studentCount) {}
     public record TaAssignmentHistoryItem(long id, long taId, String taName, LocalDateTime assignedAt, LocalDateTime endedAt, String status, String reason) {}
+    public record GroupAssignmentTimelineItem(long id, LocalDateTime changedAt, String change, String changedBy) {}
 
     public record CreateChapterRequest(String title, String description) {}
     public record CreateMasterChapterRequest(String title, String description) {}

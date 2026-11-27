@@ -5,5 +5,6 @@ public enum ActivityKind {
     LOG,
     MATERIAL,
     PARTICIPATION,
-    TASK
+    TASK,
+    GROUP_MAPPING
 }
